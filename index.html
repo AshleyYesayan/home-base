@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Home Base</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal:#5FA2AA; --teal-d:#3f7d84; --gold:#F0BB2B; --ink:#1f2933; --muted:#6b7785;
+    --bg:#f6f4ef; --card:#ffffff; --line:#e7e3da; --good:#3fae6b; --warn:#e08a2b; --bad:#d1554f;
+    --radius:14px; --shadow:0 1px 3px rgba(0,0,0,.06),0 6px 18px rgba(0,0,0,.05);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Mulish,Lato,Calibri,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+  h1,h2,h3{margin:0}
+  button{font-family:inherit;cursor:pointer}
+  .hidden{display:none!important}
+  /* Login */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{background:var(--card);border-radius:20px;box-shadow:var(--shadow);padding:36px 32px;max-width:400px;width:100%;text-align:center}
+  .logo-tile{width:64px;height:64px;border-radius:16px;background:var(--teal);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:30px}
+  .login-card h1{font-size:26px;font-weight:800}
+  .login-card p{color:var(--muted);font-size:15px;margin:8px 0 22px}
+  input,textarea,select{font-family:inherit;font-size:15px;border:1px solid var(--line);border-radius:10px;padding:11px 13px;width:100%;background:#fff;color:var(--ink)}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal)}
+  .btn{background:var(--teal);color:#fff;border:none;border-radius:10px;padding:12px 16px;font-weight:700;font-size:15px}
+  .btn:hover{background:var(--teal-d)}
+  .btn-gold{background:var(--gold);color:#4a3a05}
+  .btn-gold:hover{filter:brightness(.96)}
+  .btn-ghost{background:transparent;color:var(--teal);border:1px solid var(--line)}
+  .btn-sm{padding:6px 10px;font-size:13px;border-radius:8px}
+  .btn-block{width:100%;margin-top:12px}
+  /* App shell */
+  header.topbar{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:12px 18px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px}
+  .brand .dot{width:30px;height:30px;border-radius:9px;background:var(--teal);display:flex;align-items:center;justify-content:center;font-size:16px}
+  .spacer{flex:1}
+  .whoami{color:var(--muted);font-size:13px}
+  nav.tabs{display:flex;gap:4px;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--line);padding:0 10px;position:sticky;top:57px;z-index:19}
+  nav.tabs button{background:none;border:none;padding:13px 14px;font-size:14.5px;font-weight:700;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+  nav.tabs button.active{color:var(--teal-d);border-bottom-color:var(--gold)}
+  main{max-width:920px;margin:0 auto;padding:20px 16px 80px}
+  section.view{display:none}
+  section.view.active{display:block}
+  .view-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .view-head h2{font-size:22px;font-weight:800}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+  .card h3{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--teal-d);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;background:#eef4f5;color:var(--teal-d)}
+  .pill.bad{background:#fbeae9;color:var(--bad)} .pill.warn{background:#fdf1e0;color:var(--warn)} .pill.good{background:#e8f6ee;color:var(--good)}
+  .row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .row .grow{flex:1;min-width:0}
+  .row .title{font-weight:700;font-size:15px}
+  .row .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .check{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;flex:none;background:#fff}
+  .check.done{background:var(--good);border-color:var(--good);color:#fff}
+  .done-text{text-decoration:line-through;color:var(--muted)}
+  .qty{display:flex;align-items:center;gap:8px}
+  .qty button{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:800;font-size:16px;line-height:1}
+  .count-badge{min-width:26px;text-align:center;font-weight:800}
+  .muted{color:var(--muted)} .small{font-size:13px}
+  .add-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .add-row input,.add-row select{flex:1;min-width:120px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stars{display:inline-flex;gap:2px}
+  .star{font-size:17px;color:#d7d2c6;cursor:pointer}
+  .star.on{color:var(--gold)}
+  .tag{display:inline-block;background:#eef4f5;color:var(--teal-d);font-size:12px;font-weight:700;padding:2px 8px;border-radius:20px;margin:2px 3px 0 0}
+  .link{color:var(--teal-d);text-decoration:none;font-weight:700}
+  .icon-btn{background:none;border:none;color:var(--muted);font-size:15px;padding:4px 6px;border-radius:6px}
+  .icon-btn:hover{background:#f1efe9;color:var(--bad)}
+  .empty{color:var(--muted);font-size:14px;padding:8px 0}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;box-shadow:var(--shadow);z-index:60;opacity:0;transition:opacity .2s}
+  .toast.show{opacity:1}
+  .mealday{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+  .mealday:last-child{border-bottom:none}
+  .mealday .d{font-weight:800;color:var(--teal-d)}
+  dialog{border:none;border-radius:16px;box-shadow:var(--shadow);padding:0;max-width:460px;width:92%}
+  dialog::backdrop{background:rgba(20,25,30,.35)}
+  .modal-in{padding:20px}
+  .modal-in h3{font-size:18px;font-weight:800;margin-bottom:14px;color:var(--ink);text-transform:none;letter-spacing:0}
+  .field{margin-bottom:11px}
+  .field label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin-bottom:4px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px}
+  @media(max-width:520px){ .grid2{grid-template-columns:1fr} .view-head h2{font-size:20px} }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <div class="login-card">
+    <div class="logo-tile">🏡</div>
+    <h1>Home Base</h1>
+    <p>Your household on autopilot. Sign in with your email — we'll send a magic link, no password needed.</p>
+    <div class="field" style="text-align:left">
+      <input id="email" type="email" placeholder="you@email.com" autocomplete="email" />
+    </div>
+    <button class="btn btn-block" id="sendLink">Email me a magic link</button>
+    <p id="loginMsg" class="small" style="margin-top:14px;min-height:18px"></p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <header class="topbar">
+    <div class="brand"><span class="dot">🏡</span> Home Base</div>
+    <div class="spacer"></div>
+    <span class="whoami" id="whoami"></span>
+    <button class="btn btn-ghost btn-sm" id="signout">Sign out</button>
+  </header>
+  <nav class="tabs" id="tabs">
+    <button data-v="today" class="active">Today</button>
+    <button data-v="tasks">Tasks</button>
+    <button data-v="reminders">Reminders</button>
+    <button data-v="pantry">Backstock</button>
+    <button data-v="freezer">Freezer</button>
+    <button data-v="recipes">Recipes</button>
+    <button data-v="meal">Meal Plan</button>
+  </nav>
+
+  <main>
+    <!-- TODAY -->
+    <section class="view active" id="view-today">
+      <div class="view-head"><h2 id="todayHead">Today</h2></div>
+      <div id="todayContent"></div>
+    </section>
+
+    <!-- TASKS -->
+    <section class="view" id="view-tasks">
+      <div class="view-head"><h2>Recurring Tasks</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering.</p>
+      <div id="tasksContent"></div>
+    </section>
+
+    <!-- REMINDERS -->
+    <section class="view" id="view-reminders">
+      <div class="view-head"><h2>Reminders</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Interval upkeep — air filters, koi pond, and anything else on a clock.</p>
+      <div class="card">
+        <div id="remindersList"></div>
+        <div class="add-row">
+          <input id="rm-name" placeholder="e.g. Replace water filter" />
+          <input id="rm-n" type="number" min="1" value="2" style="max-width:70px" />
+          <select id="rm-unit" style="max-width:120px"><option value="weeks">weeks</option><option value="months" selected>months</option><option value="years">years</option></select>
+          <button class="btn btn-sm" id="rm-add">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PANTRY -->
+    <section class="view" id="view-pantry">
+      <div class="view-head"><h2>Backstock</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Set a par (how many you like on hand). Anything below par lands on your restock list.</p>
+      <div id="pantryContent"></div>
+    </section>
+
+    <!-- FREEZER -->
+    <section class="view" id="view-freezer">
+      <div class="view-head"><h2>Freezer Inventory</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Track your prepped portions. Tap − as you eat them.</p>
+      <div class="card">
+        <div id="freezerList"></div>
+        <div class="add-row">
+          <input id="fz-name" placeholder="Meal name" />
+          <input id="fz-qty" type="number" min="0" value="1" style="max-width:70px" />
+          <button class="btn btn-sm" id="fz-add">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RECIPES -->
+    <section class="view" id="view-recipes">
+      <div class="view-head"><h2>Recipe Box</h2><div class="spacer"></div><button class="btn btn-gold btn-sm" id="rc-new">+ Add recipe</button></div>
+      <div class="add-row" style="margin-top:0;margin-bottom:12px">
+        <input id="rc-search" placeholder="Search title or tag…" />
+        <select id="rc-filter" style="max-width:160px"><option value="all">All</option><option value="cooked">Cooked</option><option value="untried">Not tried yet</option></select>
+      </div>
+      <div id="recipesContent"></div>
+    </section>
+
+    <!-- MEAL PLAN -->
+    <section class="view" id="view-meal">
+      <div class="view-head"><h2>This Week's Meals</h2><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="mp-suggest">Suggest a plan</button></div>
+      <p class="muted small" style="margin:-6px 0 14px">Pull from your freezer stash and saved recipes, or type in a meal.</p>
+      <div class="card"><div id="mealContent"></div></div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Recipe modal -->
+<dialog id="recipeModal"><div class="modal-in">
+  <h3 id="rm-title">Add recipe</h3>
+  <input type="hidden" id="rc-id" />
+  <div class="field"><label>Title</label><input id="rc-f-title" placeholder="Recipe name" /></div>
+  <div class="field"><label>Link (website or Instagram)</label><input id="rc-f-url" placeholder="https://…" /></div>
+  <div class="field"><label>Ingredients</label><textarea id="rc-f-ing" rows="3" placeholder="One per line…"></textarea></div>
+  <div class="field"><label>Steps / notes</label><textarea id="rc-f-steps" rows="3"></textarea></div>
+  <div class="grid2">
+    <div class="field"><label>Tags (comma separated)</label><input id="rc-f-tags" placeholder="dinner, quick" /></div>
+    <div class="field"><label>Rating</label><div class="stars" id="rc-f-stars"></div></div>
+  </div>
+  <div class="field"><label><input type="checkbox" id="rc-f-cooked" style="width:auto;margin-right:6px" />I've cooked this</label></div>
+  <div class="modal-actions">
+    <button class="btn btn-ghost btn-sm" id="rc-cancel">Cancel</button>
+    <button class="btn btn-sm" id="rc-save">Save recipe</button>
+  </div>
+</div></dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ======= PASTE YOUR SUPABASE PROJECT DETAILS HERE ======= */
+const SUPABASE_URL      = "https://wjuejftzrrfhdurfpukd.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqdWVqZnR6cnJmaGR1cmZwdWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyODM3MzgsImV4cCI6MjA5ODg1OTczOH0.Vwq65gSEFdy6vctBiiyiIeblTDJuwph12qmOXv3pb6A";
+/* ======================================================== */
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+const PRIMARY_DAYS = ["Sunday","Tuesday","Friday"];
+const $ = s => document.querySelector(s);
+const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
+const todayStr = ()=> new Date().toISOString().slice(0,10);
+const todayName = ()=> DAYS[new Date().getDay()];
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
+
+/* cache */
+let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[]};
+
+/* grocery store favorites (per-device preference) */
+const DEFAULT_STORES=["Wegmans","Whole Foods","Costco","Target","Safeway","Publix","Kroger","Trader Joe's","Instacart"];
+function getStores(){ try{ return JSON.parse(localStorage.getItem('hb_stores')||'null')||DEFAULT_STORES.slice(); }catch(e){ return DEFAULT_STORES.slice(); } }
+function getStore(){ return localStorage.getItem('hb_store')||'Wegmans'; }
+function setStore(s){ localStorage.setItem('hb_store', s); }
+function addStore(s){ const st=getStores(); if(!st.includes(s)){ st.push(s); localStorage.setItem('hb_stores', JSON.stringify(st)); } }
+function storeSearchUrl(store, items){ return "https://www.google.com/search?q="+encodeURIComponent(store+" grocery delivery "+items.join(", ")); }
+
+/* ---------- AUTH ---------- */
+$("#sendLink").onclick = async ()=>{
+  const email = $("#email").value.trim();
+  if(!email){ $("#loginMsg").textContent="Enter your email first."; return; }
+  $("#sendLink").disabled=true; $("#loginMsg").style.color="var(--muted)"; $("#loginMsg").textContent="Sending…";
+  const {error} = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.href.split('#')[0]}});
+  $("#sendLink").disabled=false;
+  if(error){ $("#loginMsg").style.color="var(--bad)"; $("#loginMsg").textContent=error.message; }
+  else{ $("#loginMsg").style.color="var(--good)"; $("#loginMsg").textContent="Check your email — tap the link to sign in."; }
+};
+$("#email").addEventListener("keydown",e=>{if(e.key==="Enter")$("#sendLink").click();});
+$("#signout").onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
+
+sb.auth.onAuthStateChange((_e,session)=>{ if(session) enterApp(session); });
+sb.auth.getSession().then(({data})=>{ if(data.session) enterApp(data.session); });
+
+let started=false;
+async function enterApp(session){
+  if(started) return; started=true;
+  $("#login").classList.add("hidden");
+  $("#app").classList.remove("hidden");
+  $("#whoami").textContent = session.user.email;
+  await loadAll();
+  render();
+}
+
+/* ---------- DATA ---------- */
+async function loadAll(){
+  const tables = Object.keys(DATA);
+  await Promise.all(tables.map(async t=>{
+    const {data,error} = await sb.from(t).select("*");
+    if(!error) DATA[t]=data||[];
+  }));
+  // seed if brand new
+  const empty = Object.values(DATA).every(a=>a.length===0);
+  if(empty){ await seed(); }
+}
+async function refresh(t){ const {data}=await sb.from(t).select("*"); DATA[t]=data||[]; }
+
+async function seed(){
+  const tasks=[];
+  ({Sunday:["Grocery run + restock staples","Meal prep portions for the week","Backstock check"],
+    Tuesday:["House manager day — coordinate tasks","Take trash & recycling out","Wipe down kitchen counters"],
+    Friday:["Full house clean","Mow the yard","Water all the plants","Change the bed sheets","Change the bath towels"]}
+  );
+  const seedTasks={Sunday:["Barley in pond","Water front and side porch","Water orchids","Put laundry out for vendor pickup","Put dry cleaning out for vendor pickup","Refill birdseed","Wegovy shot","Refill coffee","Text Carolina the dog-walking schedule","Refill dog treats","Water indoor plants","Check mailbox","Windex sliding glass door"],
+    Tuesday:["House manager day — coordinate tasks","Take trash & recycling out","Wipe down kitchen counters"],
+    Friday:["Full house clean","Mow the yard","Water all the plants","Change the bed sheets","Change the bath towels"]};
+  Object.entries(seedTasks).forEach(([day,arr])=>arr.forEach((task,i)=>tasks.push({day,task,position:i})));
+  await sb.from("recurring_tasks").insert(tasks);
+  await sb.from("reminders").insert([
+    {name:"Change air filters",interval_n:2,interval_unit:"months",last_done:todayStr()},
+    {name:"Koi pond maintenance",interval_n:2,interval_unit:"months",last_done:todayStr()},
+    {name:"Smoke detector batteries",interval_n:6,interval_unit:"months",last_done:todayStr()}
+  ]);
+  await sb.from("pantry_items").insert([
+    {name:"Paper towels",category:"Household",par:3,count:1},
+    {name:"Toilet paper",category:"Household",par:4,count:2},
+    {name:"Tin foil",category:"Kitchen",par:2,count:1},
+    {name:"Dish soap",category:"Kitchen",par:2,count:2},
+    {name:"Coffee beans",category:"Kitchen",par:2,count:1}
+  ]);
+  await sb.from("freezer_meals").insert([
+    {name:"Chicken & rice bowls",qty:4,prepped_date:todayStr(),low_threshold:2},
+    {name:"Turkey chili portions",qty:3,prepped_date:todayStr(),low_threshold:2},
+    {name:"Veggie stir-fry",qty:2,prepped_date:todayStr(),low_threshold:2}
+  ]);
+  await sb.from("recipes").insert([
+    {title:"Sheet-pan salmon & greens",url:"",ingredients:"Salmon\nBroccoli\nOlive oil\nLemon",steps:"Roast at 425 for 15 min.",tags:["dinner","quick"],cooked:true,rating:4,notes:"Weeknight staple."}
+  ]);
+  for(const t of Object.keys(DATA)) await refresh(t);
+}
+
+/* ---------- helpers ---------- */
+function nextDue(r){
+  if(!r.last_done) return null;
+  const d=new Date(r.last_done+"T00:00:00");
+  if(r.interval_unit==="weeks") d.setDate(d.getDate()+7*r.interval_n);
+  else if(r.interval_unit==="years") d.setFullYear(d.getFullYear()+r.interval_n);
+  else d.setMonth(d.getMonth()+r.interval_n);
+  return d;
+}
+function daysUntil(d){ return Math.round((d - new Date(todayStr()+"T00:00:00"))/86400000); }
+const belowPar = p => p.count < p.par;
+const lowMeal = m => m.qty <= (m.low_threshold||2);
+
+/* ---------- NAV ---------- */
+$("#tabs").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-v]"); if(!b)return;
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.remove("active"));
+  b.classList.add("active");
+  document.querySelectorAll("section.view").forEach(v=>v.classList.remove("active"));
+  $("#view-"+b.dataset.v).classList.add("active");
+});
+
+/* ---------- RENDER ---------- */
+function render(){ renderToday(); renderTasks(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
+
+function renderToday(){
+  $("#todayHead").textContent = todayName()+" — Today";
+  const wrap=$("#todayContent"); wrap.innerHTML="";
+  const tn=todayName();
+  // today's tasks
+  const tt=DATA.recurring_tasks.filter(t=>t.day===tn).sort((a,b)=>a.position-b.position);
+  const c1=el("div","card"); c1.appendChild(el("h3",null,"✅ "+tn+"'s tasks"));
+  if(tt.length===0) c1.appendChild(el("div","empty","Nothing scheduled for "+tn+"."));
+  tt.forEach(t=>c1.appendChild(taskRow(t)));
+  wrap.appendChild(c1);
+  // reminders due
+  const due=DATA.reminders.map(r=>({r,d:nextDue(r)})).filter(x=>x.d&&daysUntil(x.d)<=7).sort((a,b)=>a.d-b.d);
+  const c2=el("div","card"); c2.appendChild(el("h3",null,"🔔 Upkeep due soon"));
+  if(due.length===0) c2.appendChild(el("div","empty","Nothing due in the next week. 🎉"));
+  due.forEach(({r,d})=>{
+    const n=daysUntil(d); const cls=n<0?"bad":(n<=2?"warn":"");
+    const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(r.name)}</div><div class="sub">${n<0?"Overdue by "+(-n)+"d":(n===0?"Due today":"Due in "+n+"d")}</div></div>`;
+    const b=el("button","btn btn-sm btn-ghost","Mark done"); b.onclick=()=>markReminder(r.id); row.appendChild(b); c2.appendChild(row);
+  });
+  wrap.appendChild(c2);
+  // restock
+  const low=DATA.pantry_items.filter(belowPar);
+  const c3=el("div","card"); c3.appendChild(el("h3",null,"🛒 Restock list"));
+  if(low.length===0) c3.appendChild(el("div","empty","Everything's stocked to par."));
+  low.forEach(p=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(p.name)}</div><div class="sub">${p.count} on hand · par ${p.par} · buy ${p.par-p.count}</div></div><span class="pill bad">low</span>`; c3.appendChild(row); });
+  wrap.appendChild(c3);
+  // freezer low
+  const fl=DATA.freezer_meals.filter(lowMeal);
+  const c4=el("div","card"); c4.appendChild(el("h3",null,"🧊 Freezer running low"));
+  if(fl.length===0) c4.appendChild(el("div","empty","Freezer's well stocked."));
+  fl.forEach(m=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(m.name)}</div><div class="sub">${m.qty} portion${m.qty===1?"":"s"} left</div></div><span class="pill warn">low</span>`; c4.appendChild(row); });
+  wrap.appendChild(c4);
+  // meal plan glance
+  const c5=el("div","card"); c5.appendChild(el("h3",null,"🍽️ This week's meals"));
+  const mp=DATA.meal_plan;
+  if(mp.length===0) c5.appendChild(el("div","empty","No meals planned yet — head to Meal Plan."));
+  DAYS.forEach(d=>{ const m=mp.find(x=>x.day===d); if(m&&m.meal_text){ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${d}</div><div class="sub">${esc(m.meal_text)}</div></div>`; c5.appendChild(row);} });
+  wrap.appendChild(c5);
+}
+
+function taskRow(t){
+  const done = t.done_date===todayStr();
+  const row=el("div","row");
+  const chk=el("div","check"+(done?" done":""),done?"✓":"");
+  chk.onclick=()=>toggleTask(t);
+  const g=el("div","grow"); g.innerHTML=`<div class="title ${done?"done-text":""}">${esc(t.task)}</div>`;
+  row.appendChild(chk); row.appendChild(g);
+  return row;
+}
+
+function renderTasks(){
+  const wrap=$("#tasksContent"); wrap.innerHTML="";
+  const order=[...PRIMARY_DAYS, ...DAYS.filter(d=>!PRIMARY_DAYS.includes(d))];
+  order.forEach(day=>{
+    const list=DATA.recurring_tasks.filter(t=>t.day===day).sort((a,b)=>a.position-b.position);
+    if(list.length===0 && !PRIMARY_DAYS.includes(day)) return;
+    const c=el("div","card"); c.appendChild(el("h3",null,dayEmoji(day)+" "+day));
+    if(list.length===0) c.appendChild(el("div","empty","No tasks yet."));
+    list.forEach(t=>{
+      const done=t.done_date===todayStr();
+      const row=el("div","row");
+      const chk=el("div","check"+(done?" done":""),done?"✓":""); chk.onclick=()=>toggleTask(t);
+      const g=el("div","grow"); g.innerHTML=`<div class="title ${done?"done-text":""}">${esc(t.task)}</div>`;
+      const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("recurring_tasks",t.id);
+      row.appendChild(chk); row.appendChild(g); row.appendChild(del); c.appendChild(row);
+    });
+    const add=el("div","add-row");
+    const inp=el("input"); inp.placeholder="Add a "+day+" task…";
+    const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ if(!inp.value.trim())return; await sb.from("recurring_tasks").insert({day,task:inp.value.trim(),position:list.length}); await refresh("recurring_tasks"); render(); };
+    inp.addEventListener("keydown",e=>{if(e.key==="Enter")b.click();});
+    add.appendChild(inp); add.appendChild(b); c.appendChild(add);
+    wrap.appendChild(c);
+  });
+}
+function dayEmoji(d){return ({Sunday:"🛒",Tuesday:"🧹",Friday:"✨"})[d]||"📅";}
+
+async function toggleTask(t){ const nd = t.done_date===todayStr()? null : todayStr(); await sb.from("recurring_tasks").update({done_date:nd}).eq("id",t.id); t.done_date=nd; render(); }
+
+function renderReminders(){
+  const wrap=$("#remindersList"); wrap.innerHTML="";
+  if(DATA.reminders.length===0){ wrap.appendChild(el("div","empty","No reminders yet.")); }
+  DATA.reminders.map(r=>({r,d:nextDue(r)})).sort((a,b)=>(a.d||0)-(b.d||0)).forEach(({r,d})=>{
+    const n=d?daysUntil(d):null; const cls=n==null?"":(n<0?"bad":(n<=7?"warn":"good"));
+    const row=el("div","row");
+    row.innerHTML=`<div class="grow"><div class="title">${esc(r.name)}</div><div class="sub">Every ${r.interval_n} ${r.interval_unit} · ${d?("next "+d.toLocaleDateString(undefined,{month:"short",day:"numeric"})):"—"}</div></div>`;
+    const pill=el("span","pill "+cls, n==null?"set":(n<0?(-n)+"d over":(n===0?"today":n+"d")));
+    const b=el("button","btn btn-sm btn-ghost","Done"); b.onclick=()=>markReminder(r.id);
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("reminders",r.id);
+    row.appendChild(pill); row.appendChild(b); row.appendChild(del); wrap.appendChild(row);
+  });
+}
+async function markReminder(id){ await sb.from("reminders").update({last_done:todayStr()}).eq("id",id); await refresh("reminders"); render(); toast("Marked done — clock reset."); }
+$("#rm-add").onclick=async()=>{ const name=$("#rm-name").value.trim(); if(!name)return; await sb.from("reminders").insert({name,interval_n:+$("#rm-n").value||1,interval_unit:$("#rm-unit").value,last_done:todayStr()}); $("#rm-name").value=""; await refresh("reminders"); render(); };
+
+function renderPantry(){
+  const wrap=$("#pantryContent"); wrap.innerHTML="";
+  const cats=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))].sort();
+  const low=DATA.pantry_items.filter(belowPar);
+  // grocery store selector
+  const gs=el("div","card"); gs.appendChild(el("h3",null,"🏬 Grocery store"));
+  const grow=el("div","add-row");
+  const sel=el("select"); getStores().forEach(s=>{ const o=el("option",null,esc(s)); o.value=s; if(s===getStore())o.selected=true; sel.appendChild(o); });
+  sel.onchange=()=>{ setStore(sel.value); render(); };
+  const nameI=el("input"); nameI.placeholder="Add a favorite store"; nameI.style.maxWidth="180px";
+  const addB=el("button","btn btn-sm","Add"); addB.onclick=()=>{ const v=nameI.value.trim(); if(v){ addStore(v); setStore(v); nameI.value=""; render(); } };
+  grow.appendChild(sel); grow.appendChild(nameI); grow.appendChild(addB);
+  gs.appendChild(grow);
+  gs.appendChild(el("div","small muted","Your restock list opens a search at the selected store. Default is Wegmans — switch or add favorites anytime."));
+  wrap.appendChild(gs);
+  const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Restock list "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
+  if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
+  low.forEach(p=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(p.name)}</div><div class="sub">Buy ${p.par-p.count} · ${p.count}/${p.par}</div></div>`; rc.appendChild(row); });
+  if(low.length){ const ob=el("button","btn btn-gold btn-sm","🛒 Search these at "+getStore()); ob.style.marginTop="10px"; ob.onclick=()=>window.open(storeSearchUrl(getStore(), low.map(p=>p.name)),"_blank"); rc.appendChild(ob); }
+  wrap.appendChild(rc);
+  cats.forEach(cat=>{
+    const items=DATA.pantry_items.filter(p=>(p.category||"Other")===cat);
+    const c=el("div","card"); c.appendChild(el("h3",null,"📦 "+cat));
+    items.forEach(p=>{
+      const row=el("div","row");
+      const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${belowPar(p)?'<span class="pill bad">low</span>':''}</div><div class="sub">par ${p.par}</div>`;
+      const q=el("div","qty");
+      const minus=el("button",null,"−"); minus.onclick=()=>adjPantry(p,-1);
+      const badge=el("span","count-badge",p.count);
+      const plus=el("button",null,"+"); plus.onclick=()=>adjPantry(p,1);
+      q.appendChild(minus); q.appendChild(badge); q.appendChild(plus);
+      const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("pantry_items",p.id);
+      row.appendChild(g); row.appendChild(q); row.appendChild(del); c.appendChild(row);
+    });
+    wrap.appendChild(c);
+  });
+  const c=el("div","card"); c.appendChild(el("h3",null,"➕ Add staple"));
+  const add=el("div","add-row");
+  add.innerHTML=`<input id="pt-name" placeholder="Item name"/><input id="pt-cat" placeholder="Category" style="max-width:130px"/><input id="pt-par" type="number" min="1" value="2" title="par" style="max-width:64px"/><input id="pt-cnt" type="number" min="0" value="0" title="have" style="max-width:64px"/>`;
+  const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ const n=$("#pt-name").value.trim(); if(!n)return; await sb.from("pantry_items").insert({name:n,category:($("#pt-cat").value.trim()||"Other"),par:+$("#pt-par").value||1,count:+$("#pt-cnt").value||0}); await refresh("pantry_items"); render(); };
+  add.appendChild(b); c.appendChild(add); wrap.appendChild(c);
+}
+async function adjPantry(p,d){ const v=Math.max(0,p.count+d); await sb.from("pantry_items").update({count:v}).eq("id",p.id); p.count=v; render(); }
+
+function renderFreezer(){
+  const wrap=$("#freezerList"); wrap.innerHTML="";
+  if(DATA.freezer_meals.length===0) wrap.appendChild(el("div","empty","No prepped meals logged yet."));
+  DATA.freezer_meals.sort((a,b)=>a.name.localeCompare(b.name)).forEach(m=>{
+    const row=el("div","row");
+    const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(m.name)} ${lowMeal(m)?'<span class="pill warn">low</span>':''}</div><div class="sub">${m.prepped_date?"prepped "+m.prepped_date:""}</div>`;
+    const q=el("div","qty");
+    const minus=el("button",null,"−"); minus.onclick=()=>adjFreezer(m,-1);
+    const badge=el("span","count-badge",m.qty);
+    const plus=el("button",null,"+"); plus.onclick=()=>adjFreezer(m,1);
+    q.appendChild(minus); q.appendChild(badge); q.appendChild(plus);
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("freezer_meals",m.id);
+    row.appendChild(g); row.appendChild(q); row.appendChild(del); wrap.appendChild(row);
+  });
+}
+async function adjFreezer(m,d){ const v=Math.max(0,m.qty+d); await sb.from("freezer_meals").update({qty:v}).eq("id",m.id); m.qty=v; render(); }
+$("#fz-add").onclick=async()=>{ const n=$("#fz-name").value.trim(); if(!n)return; await sb.from("freezer_meals").insert({name:n,qty:+$("#fz-qty").value||0,prepped_date:todayStr(),low_threshold:2}); $("#fz-name").value=""; await refresh("freezer_meals"); render(); };
+
+/* RECIPES */
+let editStars=0;
+function renderRecipes(){
+  const wrap=$("#recipesContent"); wrap.innerHTML="";
+  const q=($("#rc-search").value||"").toLowerCase();
+  const f=$("#rc-filter").value;
+  let list=DATA.recipes.slice();
+  if(f==="cooked") list=list.filter(r=>r.cooked);
+  if(f==="untried") list=list.filter(r=>!r.cooked);
+  if(q) list=list.filter(r=>r.title.toLowerCase().includes(q)||(r.tags||[]).join(" ").toLowerCase().includes(q));
+  if(list.length===0){ wrap.appendChild(el("div","empty","No recipes match. Add one with the button above.")); return; }
+  list.sort((a,b)=>(b.rating||0)-(a.rating||0));
+  list.forEach(r=>{
+    const c=el("div","card");
+    const head=el("div","row");
+    head.innerHTML=`<div class="grow"><div class="title">${esc(r.title)} ${r.cooked?'<span class="pill good">cooked</span>':'<span class="pill">to try</span>'}</div><div class="sub">${starHtml(r.rating)}</div></div>`;
+    const editB=el("button","icon-btn","✎"); editB.style.color="var(--teal-d)"; editB.onclick=()=>openRecipe(r);
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("recipes",r.id);
+    head.appendChild(editB); head.appendChild(del); c.appendChild(head);
+    const body=el("div"); body.style.marginTop="6px";
+    let h="";
+    if(r.url) h+=`<a class="link small" href="${esc(r.url)}" target="_blank" rel="noopener">Open link ↗</a><br>`;
+    if((r.tags||[]).length) h+=r.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+    if(r.notes) h+=`<div class="sub" style="margin-top:6px">${esc(r.notes)}</div>`;
+    body.innerHTML=h; c.appendChild(body);
+    wrap.appendChild(c);
+  });
+}
+function starHtml(n){n=n||0;let s="";for(let i=1;i<=5;i++)s+=`<span class="star ${i<=n?"on":""}">★</span>`;return `<span class="stars">${s}</span>`;}
+$("#rc-search").oninput=renderRecipes; $("#rc-filter").onchange=renderRecipes;
+$("#rc-new").onclick=()=>openRecipe(null);
+function openRecipe(r){
+  $("#rm-title").textContent = r? "Edit recipe":"Add recipe";
+  $("#rc-id").value = r? r.id:"";
+  $("#rc-f-title").value=r?r.title:""; $("#rc-f-url").value=r?(r.url||""):"";
+  $("#rc-f-ing").value=r?(r.ingredients||""):""; $("#rc-f-steps").value=r?(r.steps||""):"";
+  $("#rc-f-tags").value=r?(r.tags||[]).join(", "):""; $("#rc-f-cooked").checked=r?!!r.cooked:false;
+  editStars=r?(r.rating||0):0; drawEditStars();
+  $("#recipeModal").showModal();
+}
+function drawEditStars(){ const w=$("#rc-f-stars"); w.innerHTML=""; for(let i=1;i<=5;i++){ const s=el("span","star"+(i<=editStars?" on":""),"★"); s.onclick=()=>{editStars=i;drawEditStars();}; w.appendChild(s);} }
+$("#rc-cancel").onclick=()=>$("#recipeModal").close();
+$("#rc-save").onclick=async()=>{
+  const title=$("#rc-f-title").value.trim(); if(!title){toast("Add a title.");return;}
+  const rec={title,url:$("#rc-f-url").value.trim(),ingredients:$("#rc-f-ing").value,steps:$("#rc-f-steps").value,
+    tags:$("#rc-f-tags").value.split(",").map(s=>s.trim()).filter(Boolean),cooked:$("#rc-f-cooked").checked,rating:editStars,notes:$("#rc-f-steps").value?"" : ""};
+  delete rec.notes;
+  const id=$("#rc-id").value;
+  if(id) await sb.from("recipes").update(rec).eq("id",id);
+  else await sb.from("recipes").insert(rec);
+  $("#recipeModal").close(); await refresh("recipes"); render(); toast("Recipe saved.");
+};
+
+/* MEAL PLAN */
+function renderMeal(){
+  const wrap=$("#mealContent"); wrap.innerHTML="";
+  DAYS.forEach(day=>{
+    const m=DATA.meal_plan.find(x=>x.day===day);
+    const rowW=el("div","mealday");
+    rowW.appendChild(el("div","d",day));
+    const holder=el("div");
+    const inp=el("input"); inp.placeholder="What's for dinner?"; inp.value=m?(m.meal_text||""):"";
+    inp.onchange=()=>saveMeal(day,inp.value);
+    const sel=el("select"); sel.style.marginTop="6px";
+    let opts=`<option value="">— quick pick from your stash —</option>`;
+    DATA.freezer_meals.forEach(f=>opts+=`<option value="🧊 ${escAttr(f.name)}">🧊 ${esc(f.name)} (${f.qty} left)</option>`);
+    DATA.recipes.forEach(r=>opts+=`<option value="${escAttr(r.title)}">📖 ${esc(r.title)}</option>`);
+    sel.innerHTML=opts;
+    sel.onchange=()=>{ if(sel.value){ inp.value=sel.value; saveMeal(day,sel.value); sel.value=""; } };
+    holder.appendChild(inp); holder.appendChild(sel);
+    rowW.appendChild(holder);
+    wrap.appendChild(rowW);
+  });
+}
+async function saveMeal(day,text){
+  const existing=DATA.meal_plan.find(x=>x.day===day);
+  if(existing){ await sb.from("meal_plan").update({meal_text:text}).eq("id",existing.id); existing.meal_text=text; }
+  else { const {data}=await sb.from("meal_plan").insert({day,meal_text:text}).select(); if(data)DATA.meal_plan.push(data[0]); }
+  renderToday();
+}
+$("#mp-suggest").onclick=async()=>{
+  const pool=[...DATA.freezer_meals.filter(f=>f.qty>0).map(f=>"🧊 "+f.name), ...DATA.recipes.map(r=>r.title)];
+  if(pool.length===0){ toast("Add some freezer meals or recipes first."); return; }
+  for(let i=0;i<DAYS.length;i++){ const pick=pool[Math.floor(Math.random()*pool.length)]; await saveMeal(DAYS[i],pick); }
+  renderMeal(); toast("Drafted a week — tweak anything you like.");
+};
+
+/* generic delete */
+async function delRow(table,id){ await sb.from(table).delete().eq("id",id); await refresh(table); render(); }
+
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function escAttr(s){return esc(s).replace(/'/g,"&#39;");}
+</script>
+</body>
+</html>
