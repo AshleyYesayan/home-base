@@ -725,9 +725,12 @@ async function saveMealToRotation(text){
   await refresh("meal_rotation"); renderMeal(); toast("Saved to your rotation.");
 }
 async function autoMealWeekReset(){
+  if(!CURRENT_HH) return;
   const cur=weekStartFriday();
-  const prev=localStorage.getItem("hb_mealWeek");
-  if(prev===cur){ return; }
+  let prev=null;
+  try { const {data}=await sb.from("households").select("meals_week").eq("id",CURRENT_HH).single(); prev=data?data.meals_week:null; } catch(e){ return; }
+  if(prev===cur) return;
+  await sb.from("households").update({meals_week:cur}).eq("id",CURRENT_HH); // claim before rolling over
   if(prev){
     const rows=MEAL_DAYS.map(day=>{ const m=DATA.meal_plan.find(x=>x.day===day); return (m&&m.meal_text)?{week_start:prev, day, meal_text:m.meal_text}:null; }).filter(Boolean);
     if(rows.length){ await sb.from("meal_history").delete().eq("week_start", prev); await sb.from("meal_history").insert(rows); }
@@ -735,7 +738,6 @@ async function autoMealWeekReset(){
     await refresh("meal_plan"); await refresh("meal_history");
     toast("New meal week (Fri–Thu) — last week saved, this one's blank.");
   }
-  localStorage.setItem("hb_mealWeek", cur);
 }
 async function archiveWeek(){
   const wk=weekStartFriday();
@@ -878,11 +880,15 @@ async function refreshTasks(){
 function weekKey(){ const d=new Date(todayStr()+"T00:00:00"); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); }
 async function autoWeeklyRefresh(){
   if(new Date().getDay()!==0) return;              // Sundays only
-  if(DATA.task_templates.length===0) return;
-  if(localStorage.getItem("hb_weeklyRefresh")===weekKey()) return;
-  await applyTemplate();
-  localStorage.setItem("hb_weeklyRefresh", weekKey());
-  toast("Sunday reset — tasks repopulated from your template.");
+  if(DATA.task_templates.length===0 || !CURRENT_HH) return;
+  const wk=weekKey();
+  try {
+    const {data}=await sb.from("households").select("tasks_week").eq("id",CURRENT_HH).single();
+    if(data && data.tasks_week===wk) return;       // already reset this week by anyone in the household
+    await sb.from("households").update({tasks_week:wk}).eq("id",CURRENT_HH); // claim before resetting
+    await applyTemplate();
+    toast("Sunday reset — tasks repopulated from your template.");
+  } catch(e){}
 }
 
 /* generic delete */
