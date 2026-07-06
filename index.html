@@ -115,6 +115,7 @@
   <nav class="tabs" id="tabs">
     <button data-v="today" class="active">Today</button>
     <button data-v="tasks">Tasks</button>
+    <button data-v="weekly">This Week</button>
     <button data-v="handyman">Handyman</button>
     <button data-v="upcoming">Upcoming</button>
     <button data-v="reminders">Reminders</button>
@@ -136,6 +137,13 @@
       <div class="view-head"><h2>Recurring Tasks</h2><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
       <p class="muted small" style="margin:-6px 0 14px">Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it auto-resets each Sunday).</p>
       <div id="tasksContent"></div>
+    </section>
+
+    <!-- THIS WEEK -->
+    <section class="view" id="view-weekly">
+      <div class="view-head"><h2>This Week</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Extra one-off tasks to get done this week. Check them off as you go.</p>
+      <div id="weeklyContent"></div>
     </section>
 
     <!-- HANDYMAN -->
@@ -255,7 +263,7 @@ const todayName = ()=> DAYS[new Date().getDay()];
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
 
 /* cache */
-let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[]};
+let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[]};
 
 /* grocery store favorites (per-device preference) */
 const DEFAULT_STORES=["Wegmans","Whole Foods","Costco","Target","Safeway","Publix","Kroger","Trader Joe's","Instacart","Amazon"];
@@ -366,7 +374,7 @@ $("#tabs").addEventListener("click",e=>{
 });
 
 /* ---------- RENDER ---------- */
-function render(){ renderToday(); renderTasks(); renderHandyman(); renderUpcoming(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
+function render(){ renderToday(); renderTasks(); renderWeekly(); renderHandyman(); renderUpcoming(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
 
 function renderToday(){
   $("#todayHead").textContent = todayName()+" — Today";
@@ -378,6 +386,13 @@ function renderToday(){
   if(tt.length===0) c1.appendChild(el("div","empty","Nothing scheduled for "+tn+"."));
   [...tt.filter(t=>t.done_date!==todayStr()), ...tt.filter(t=>t.done_date===todayStr())].forEach(t=>c1.appendChild(taskRow(t)));
   wrap.appendChild(c1);
+  // this week's extra tasks
+  const wk=DATA.weekly_tasks.filter(t=>!t.done);
+  if(wk.length){
+    const cw=el("div","card"); cw.appendChild(el("h3",null,"📌 This week"));
+    wk.forEach(t=>{ const row=el("div","row"); const chk=el("div","check"); chk.onclick=()=>toggleWeekly(t,true); const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>`; row.appendChild(chk); row.appendChild(g); cw.appendChild(row); });
+    wrap.appendChild(cw);
+  }
   // reminders due
   const due=DATA.reminders.map(r=>({r,d:nextDue(r)})).filter(x=>x.d&&daysUntil(x.d)<=7).sort((a,b)=>a.d-b.d);
   const c2=el("div","card"); c2.appendChild(el("h3",null,"🔔 Upkeep due soon"));
@@ -763,6 +778,34 @@ function renderUpcoming(){
   occ.forEach(o=>{ const row=el("div","row"); const n=daysUntil(o.d); row.innerHTML=`<div class="grow"><div class="title">${dayEmoji(o.day)} ${o.day}</div><div class="sub">${fmtDate(o.d)} · ${o.count} task${o.count===1?"":"s"}</div></div><span class="pill">${n===0?"today":"in "+n+"d"}</span>`; c2.appendChild(row); });
   wrap.appendChild(c2);
 }
+
+/* THIS WEEK (ad-hoc weekly tasks) */
+function renderWeekly(){
+  const wrap=$("#weeklyContent"); if(!wrap) return; wrap.innerHTML="";
+  const open=DATA.weekly_tasks.filter(t=>!t.done);
+  const done=DATA.weekly_tasks.filter(t=>t.done);
+  const c=el("div","card"); c.appendChild(el("h3",null,"📌 To do this week "+(open.length?`<span class="pill bad">${open.length}</span>`:"")));
+  if(open.length===0) c.appendChild(el("div","empty","Nothing extra this week."));
+  open.forEach(t=>{
+    const row=el("div","row");
+    const chk=el("div","check"); chk.onclick=()=>toggleWeekly(t,true);
+    const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>`;
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("weekly_tasks",t.id);
+    row.appendChild(chk); row.appendChild(g); row.appendChild(del); c.appendChild(row);
+  });
+  const add=el("div","add-row");
+  const inp=el("input"); inp.placeholder="Add a task for this week…";
+  const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ if(!inp.value.trim())return; await sb.from("weekly_tasks").insert({task:inp.value.trim()}); inp.value=""; await refresh("weekly_tasks"); renderWeekly(); };
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")b.click();});
+  add.appendChild(inp); add.appendChild(b); c.appendChild(add);
+  wrap.appendChild(c);
+  if(done.length){
+    const dc=el("div","card"); dc.appendChild(el("h3",null,`✅ Done <span class="pill good">${done.length}</span>`));
+    done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.title="Undo"; chk.onclick=()=>toggleWeekly(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("weekly_tasks",t.id); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
+    wrap.appendChild(dc);
+  }
+}
+async function toggleWeekly(t,done){ await sb.from("weekly_tasks").update({done}).eq("id",t.id); t.done=done; renderWeekly(); renderToday(); }
 
 /* HANDYMAN */
 function renderHandyman(){
