@@ -116,6 +116,7 @@
     <button data-v="today" class="active">Today</button>
     <button data-v="tasks">Tasks</button>
     <button data-v="handyman">Handyman</button>
+    <button data-v="upcoming">Upcoming</button>
     <button data-v="reminders">Reminders</button>
     <button data-v="pantry">Backstock</button>
     <button data-v="freezer">Freezer</button>
@@ -142,6 +143,13 @@
       <div class="view-head"><h2>Handyman</h2></div>
       <p class="muted small" style="margin:-6px 0 14px">A running list for the handyman who comes as needed. Add items anytime; check them off when they're done.</p>
       <div id="handymanContent"></div>
+    </section>
+
+    <!-- UPCOMING -->
+    <section class="view" id="view-upcoming">
+      <div class="view-head"><h2>Upcoming</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Everything with a date ahead, soonest first. Tap a date to reschedule it.</p>
+      <div id="upcomingContent"></div>
     </section>
 
     <!-- REMINDERS -->
@@ -355,7 +363,7 @@ $("#tabs").addEventListener("click",e=>{
 });
 
 /* ---------- RENDER ---------- */
-function render(){ renderToday(); renderTasks(); renderHandyman(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
+function render(){ renderToday(); renderTasks(); renderHandyman(); renderUpcoming(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
 
 function renderToday(){
   $("#todayHead").textContent = todayName()+" — Today";
@@ -622,6 +630,41 @@ $("#mp-suggest").onclick=async()=>{
   for(let i=0;i<DAYS.length;i++){ const pick=pool[Math.floor(Math.random()*pool.length)]; await saveMeal(DAYS[i],pick); }
   renderMeal(); toast("Drafted a week — tweak anything you like.");
 };
+
+/* UPCOMING + RESCHEDULE */
+function nextWeekday(dayName){ const target=DAYS.indexOf(dayName); const d=new Date(todayStr()+"T00:00:00"); const diff=(target - d.getDay()+7)%7; d.setDate(d.getDate()+diff); return d; }
+function fmtDate(d){ return d.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}); }
+function rescheduleReminder(r, dueStr){
+  const d=new Date(dueStr+"T00:00:00");
+  if(r.interval_unit==="weeks") d.setDate(d.getDate()-7*r.interval_n);
+  else if(r.interval_unit==="years") d.setFullYear(d.getFullYear()-r.interval_n);
+  else d.setMonth(d.getMonth()-r.interval_n);
+  return sb.from("reminders").update({last_done:d.toISOString().slice(0,10)}).eq("id",r.id).then(()=>refresh("reminders")).then(()=>{ render(); toast("Rescheduled."); });
+}
+function renderUpcoming(){
+  const wrap=$("#upcomingContent"); if(!wrap) return; wrap.innerHTML="";
+  // reminders with dates, reschedulable
+  const items=DATA.reminders.map(r=>({r,d:nextDue(r)})).filter(x=>x.d).sort((a,b)=>a.d-b.d);
+  const c=el("div","card"); c.appendChild(el("h3",null,"🔔 Reminders — reschedule anytime"));
+  if(items.length===0) c.appendChild(el("div","empty","No dated reminders yet."));
+  items.forEach(({r,d})=>{
+    const n=daysUntil(d); const cls=n<0?"bad":(n<=7?"warn":"good");
+    const row=el("div","row");
+    const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(r.name)}</div><div class="sub">${fmtDate(d)} · every ${r.interval_n} ${r.interval_unit}</div>`;
+    const pill=el("span","pill "+cls, n<0?(-n)+"d over":(n===0?"today":n+"d"));
+    const dp=el("input"); dp.type="date"; dp.value=d.toISOString().slice(0,10); dp.style.cssText="max-width:150px;flex:none"; dp.onchange=()=>{ if(dp.value) rescheduleReminder(r, dp.value); };
+    const done=el("button","icon-btn","✓"); done.title="Done (reset clock to today)"; done.style.color="var(--good)"; done.onclick=()=>markReminder(r.id);
+    row.appendChild(g); row.appendChild(pill); row.appendChild(dp); row.appendChild(done); c.appendChild(row);
+  });
+  wrap.appendChild(c);
+  // recurring task days (next occurrence)
+  const daysWith=[...new Set(DATA.recurring_tasks.map(t=>t.day))];
+  const occ=daysWith.map(day=>({day, d:nextWeekday(day), count:DATA.recurring_tasks.filter(t=>t.day===day).length})).sort((a,b)=>a.d-b.d);
+  const c2=el("div","card"); c2.appendChild(el("h3",null,"📅 Recurring task days"));
+  if(occ.length===0) c2.appendChild(el("div","empty","No recurring tasks."));
+  occ.forEach(o=>{ const row=el("div","row"); const n=daysUntil(o.d); row.innerHTML=`<div class="grow"><div class="title">${dayEmoji(o.day)} ${o.day}</div><div class="sub">${fmtDate(o.d)} · ${o.count} task${o.count===1?"":"s"}</div></div><span class="pill">${n===0?"today":"in "+n+"d"}</span>`; c2.appendChild(row); });
+  wrap.appendChild(c2);
+}
 
 /* HANDYMAN */
 function renderHandyman(){
