@@ -103,17 +103,11 @@
   <div class="login-card">
     <div class="logo-tile">🏡</div>
     <h1>Home Base</h1>
-    <p>Your household on autopilot. Enter your email and we'll send a 6-digit sign-in code.</p>
+    <p>Your household on autopilot. Sign in with your email — we'll send a magic link, no password needed.</p>
     <div class="field" style="text-align:left">
       <input id="email" type="email" placeholder="you@email.com" autocomplete="email" inputmode="email" />
     </div>
-    <button class="btn btn-block" id="sendCode">Email me a code</button>
-    <div id="codeStep" class="hidden" style="margin-top:12px">
-      <div class="field" style="text-align:left">
-        <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="8" />
-      </div>
-      <button class="btn btn-block" id="verifyCode">Verify &amp; sign in</button>
-    </div>
+    <button class="btn btn-block" id="sendLink">Email me a magic link</button>
     <p id="loginMsg" class="small" style="margin-top:14px;min-height:18px"></p>
   </div>
 </div>
@@ -294,25 +288,16 @@ function amazonUrl(item){ return "https://www.amazon.com/s?k="+encodeURIComponen
 function copyList(items){ try{ navigator.clipboard.writeText(items.join(", ")); toast("Restock list copied — paste it in the store search."); }catch(e){ toast("Couldn't copy list."); } }
 
 /* ---------- AUTH ---------- */
-$("#sendCode").onclick = async ()=>{
+$("#sendLink").onclick = async ()=>{
   const email = $("#email").value.trim();
   if(!email){ $("#loginMsg").style.color="var(--bad)"; $("#loginMsg").textContent="Enter your email first."; return; }
-  $("#sendCode").disabled=true; $("#loginMsg").style.color="var(--muted)"; $("#loginMsg").textContent="Sending your code…";
+  $("#sendLink").disabled=true; $("#loginMsg").style.color="var(--muted)"; $("#loginMsg").textContent="Sending…";
   const {error} = await sb.auth.signInWithOtp({email, options:{shouldCreateUser:true, emailRedirectTo: location.href.split('#')[0]}});
-  $("#sendCode").disabled=false;
+  $("#sendLink").disabled=false;
   if(error){ $("#loginMsg").style.color="var(--bad)"; $("#loginMsg").textContent=error.message; }
-  else{ $("#codeStep").classList.remove("hidden"); $("#loginMsg").style.color="var(--good)"; $("#loginMsg").textContent="Check your email for a 6-digit code, then enter it here."; $("#code").focus(); }
+  else{ $("#loginMsg").style.color="var(--good)"; $("#loginMsg").textContent="Check your email — tap the link to sign in. Open it in Safari (not the home-screen app) to stay logged in."; }
 };
-$("#verifyCode").onclick = async ()=>{
-  const email=$("#email").value.trim(); const token=$("#code").value.trim();
-  if(!token){ $("#loginMsg").style.color="var(--bad)"; $("#loginMsg").textContent="Enter the code from your email."; return; }
-  $("#verifyCode").disabled=true; $("#loginMsg").style.color="var(--muted)"; $("#loginMsg").textContent="Signing you in…";
-  const {error}=await sb.auth.verifyOtp({email, token, type:"email"});
-  $("#verifyCode").disabled=false;
-  if(error){ $("#loginMsg").style.color="var(--bad)"; $("#loginMsg").textContent=error.message; }
-};
-$("#email").addEventListener("keydown",e=>{if(e.key==="Enter")$("#sendCode").click();});
-$("#code").addEventListener("keydown",e=>{if(e.key==="Enter")$("#verifyCode").click();});
+$("#email").addEventListener("keydown",e=>{if(e.key==="Enter")$("#sendLink").click();});
 $("#signout").onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
 $("#invite").onclick = async ()=>{
   const email=(prompt("Invite someone to your household — enter their email:")||"").trim().toLowerCase();
