@@ -115,6 +115,7 @@
   <nav class="tabs" id="tabs">
     <button data-v="today" class="active">Today</button>
     <button data-v="tasks">Tasks</button>
+    <button data-v="handyman">Handyman</button>
     <button data-v="reminders">Reminders</button>
     <button data-v="pantry">Backstock</button>
     <button data-v="freezer">Freezer</button>
@@ -131,9 +132,16 @@
 
     <!-- TASKS -->
     <section class="view" id="view-tasks">
-      <div class="view-head"><h2>Recurring Tasks</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering.</p>
+      <div class="view-head"><h2>Recurring Tasks</h2><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
+      <p class="muted small" style="margin:-6px 0 14px">Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it auto-resets each Sunday).</p>
       <div id="tasksContent"></div>
+    </section>
+
+    <!-- HANDYMAN -->
+    <section class="view" id="view-handyman">
+      <div class="view-head"><h2>Handyman</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">A running list for the handyman who comes as needed. Add items anytime; check them off when they're done.</p>
+      <div id="handymanContent"></div>
     </section>
 
     <!-- REMINDERS -->
@@ -175,6 +183,14 @@
     <!-- RECIPES -->
     <section class="view" id="view-recipes">
       <div class="view-head"><h2>Recipe Box</h2><div class="spacer"></div><button class="btn btn-gold btn-sm" id="rc-new">+ Add recipe</button></div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>📲 Save from Instagram or the web</h3>
+        <div class="add-row" style="margin-top:0">
+          <input id="rc-link" placeholder="Paste an Instagram or recipe link…" />
+          <button class="btn btn-sm" id="rc-linkadd">Save link</button>
+        </div>
+        <div class="small muted" style="margin-top:6px">Copy the post's link in Instagram (Share → Copy link), paste it here, and it's saved to reference. Ask me to set up the one-tap iPhone share too.</div>
+      </div>
       <div class="add-row" style="margin-top:0;margin-bottom:12px">
         <input id="rc-search" placeholder="Search title or tag…" />
         <select id="rc-filter" style="max-width:160px"><option value="all">All</option><option value="cooked">Cooked</option><option value="untried">Not tried yet</option></select>
@@ -229,7 +245,7 @@ const todayName = ()=> DAYS[new Date().getDay()];
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
 
 /* cache */
-let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[]};
+let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[]};
 
 /* grocery store favorites (per-device preference) */
 const DEFAULT_STORES=["Wegmans","Whole Foods","Costco","Target","Safeway","Publix","Kroger","Trader Joe's","Instacart","Amazon"];
@@ -265,6 +281,7 @@ async function enterApp(session){
   $("#app").classList.remove("hidden");
   $("#whoami").textContent = session.user.email;
   await loadAll();
+  await autoWeeklyRefresh();
   render();
 }
 
@@ -338,7 +355,7 @@ $("#tabs").addEventListener("click",e=>{
 });
 
 /* ---------- RENDER ---------- */
-function render(){ renderToday(); renderTasks(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
+function render(){ renderToday(); renderTasks(); renderHandyman(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
 
 function renderToday(){
   $("#todayHead").textContent = todayName()+" — Today";
@@ -541,6 +558,15 @@ function renderRecipes(){
 function starHtml(n){n=n||0;let s="";for(let i=1;i<=5;i++)s+=`<span class="star ${i<=n?"on":""}">★</span>`;return `<span class="stars">${s}</span>`;}
 $("#rc-search").oninput=renderRecipes; $("#rc-filter").onchange=renderRecipes;
 $("#rc-new").onclick=()=>openRecipe(null);
+$("#tpl-save").onclick=saveTemplate;
+$("#tpl-refresh").onclick=refreshTasks;
+$("#rc-linkadd").onclick=async()=>{
+  const url=$("#rc-link").value.trim(); if(!url){ toast("Paste a link first."); return; }
+  let title="Saved link"; try{ const h=new URL(url.startsWith("http")?url:("https://"+url)).hostname.replace(/^www\./,""); title = h.includes("instagram")?"Instagram recipe":h; }catch(e){}
+  await sb.from("recipes").insert({title, url, tags:["to try"], cooked:false, rating:0});
+  $("#rc-link").value=""; await refresh("recipes"); render(); toast("Saved to your recipe box — rename it anytime.");
+};
+$("#rc-link").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#rc-linkadd").click(); });
 function openRecipe(r){
   $("#rm-title").textContent = r? "Edit recipe":"Add recipe";
   $("#rc-id").value = r? r.id:"";
@@ -596,6 +622,64 @@ $("#mp-suggest").onclick=async()=>{
   for(let i=0;i<DAYS.length;i++){ const pick=pool[Math.floor(Math.random()*pool.length)]; await saveMeal(DAYS[i],pick); }
   renderMeal(); toast("Drafted a week — tweak anything you like.");
 };
+
+/* HANDYMAN */
+function renderHandyman(){
+  const wrap=$("#handymanContent"); if(!wrap) return; wrap.innerHTML="";
+  const open=DATA.handyman_tasks.filter(t=>!t.done);
+  const done=DATA.handyman_tasks.filter(t=>t.done);
+  const c=el("div","card"); c.appendChild(el("h3",null,"🔧 To do "+(open.length?`<span class="pill bad">${open.length}</span>`:"")));
+  if(open.length===0) c.appendChild(el("div","empty","No open handyman tasks."));
+  open.forEach(t=>{
+    const row=el("div","row");
+    const chk=el("div","check"); chk.onclick=()=>toggleHandyman(t,true);
+    const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>${t.notes?`<div class="sub">${esc(t.notes)}</div>`:""}`;
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id);
+    row.appendChild(chk); row.appendChild(g); row.appendChild(del); c.appendChild(row);
+  });
+  const add=el("div","add-row");
+  const inp=el("input"); inp.placeholder="Add a handyman task…";
+  const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ if(!inp.value.trim())return; await sb.from("handyman_tasks").insert({task:inp.value.trim()}); inp.value=""; await refresh("handyman_tasks"); renderHandyman(); };
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter")b.click();});
+  add.appendChild(inp); add.appendChild(b); c.appendChild(add);
+  wrap.appendChild(c);
+  if(done.length){
+    const dc=el("div","card"); dc.appendChild(el("h3",null,"✅ Done"));
+    done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.onclick=()=>toggleHandyman(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
+    wrap.appendChild(dc);
+  }
+}
+async function toggleHandyman(t,done){ await sb.from("handyman_tasks").update({done}).eq("id",t.id); t.done=done; renderHandyman(); }
+
+/* TASK TEMPLATE + REFRESH */
+async function saveTemplate(){
+  if(!confirm("Save your current task lists as the template? This replaces the saved template.")) return;
+  await sb.from("task_templates").delete().not("id","is",null);
+  const rows=DATA.recurring_tasks.map(t=>({day:t.day, task:t.task, position:t.position}));
+  if(rows.length) await sb.from("task_templates").insert(rows);
+  await refresh("task_templates");
+  toast("Template saved from your current lists.");
+}
+async function applyTemplate(){
+  await sb.from("recurring_tasks").delete().not("id","is",null);
+  const rows=DATA.task_templates.map(t=>({day:t.day, task:t.task, position:t.position}));
+  if(rows.length) await sb.from("recurring_tasks").insert(rows);
+  await refresh("recurring_tasks");
+}
+async function refreshTasks(){
+  if(DATA.task_templates.length===0){ toast("No template saved yet — tap Save as template first."); return; }
+  if(!confirm("Reset every day's task list to your saved template? This clears current tasks and checkmarks.")) return;
+  await applyTemplate(); render(); toast("Tasks refreshed from your template.");
+}
+function weekKey(){ const d=new Date(todayStr()+"T00:00:00"); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); }
+async function autoWeeklyRefresh(){
+  if(new Date().getDay()!==0) return;              // Sundays only
+  if(DATA.task_templates.length===0) return;
+  if(localStorage.getItem("hb_weeklyRefresh")===weekKey()) return;
+  await applyTemplate();
+  localStorage.setItem("hb_weeklyRefresh", weekKey());
+  toast("Sunday reset — tasks repopulated from your template.");
+}
 
 /* generic delete */
 async function delRow(table,id){ await sb.from(table).delete().eq("id",id); await refresh(table); render(); }
