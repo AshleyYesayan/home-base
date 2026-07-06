@@ -246,6 +246,8 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const PRIMARY_DAYS = ["Sunday","Tuesday","Friday"];
+const MEAL_DAYS = ["Friday","Saturday","Sunday","Monday","Tuesday","Wednesday","Thursday"]; // meal week runs Fri -> Thu
+function weekStartFriday(){ const d=new Date(todayStr()+"T00:00:00"); const off=(d.getDay()-5+7)%7; d.setDate(d.getDate()-off); return d.toISOString().slice(0,10); }
 const $ = s => document.querySelector(s);
 const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
 const todayStr = ()=> new Date().toISOString().slice(0,10);
@@ -290,6 +292,7 @@ async function enterApp(session){
   $("#whoami").textContent = session.user.email;
   await loadAll();
   await autoWeeklyRefresh();
+  await autoMealWeekReset();
   render();
 }
 
@@ -373,7 +376,7 @@ function renderToday(){
   const tt=DATA.recurring_tasks.filter(t=>t.day===tn).sort((a,b)=>a.position-b.position);
   const c1=el("div","card"); c1.appendChild(el("h3",null,"✅ "+tn+"'s tasks"));
   if(tt.length===0) c1.appendChild(el("div","empty","Nothing scheduled for "+tn+"."));
-  tt.forEach(t=>c1.appendChild(taskRow(t)));
+  [...tt.filter(t=>t.done_date!==todayStr()), ...tt.filter(t=>t.done_date===todayStr())].forEach(t=>c1.appendChild(taskRow(t)));
   wrap.appendChild(c1);
   // reminders due
   const due=DATA.reminders.map(r=>({r,d:nextDue(r)})).filter(x=>x.d&&daysUntil(x.d)<=7).sort((a,b)=>a.d-b.d);
@@ -401,7 +404,7 @@ function renderToday(){
   const c5=el("div","card"); c5.appendChild(el("h3",null,"🍽️ This week's meals"));
   const mp=DATA.meal_plan;
   if(mp.length===0) c5.appendChild(el("div","empty","No meals planned yet — head to Meal Plan."));
-  DAYS.forEach(d=>{ const m=mp.find(x=>x.day===d); if(m&&m.meal_text){ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${d}</div><div class="sub">${esc(m.meal_text)}</div></div>`; c5.appendChild(row);} });
+  MEAL_DAYS.forEach(d=>{ const m=mp.find(x=>x.day===d); if(m&&m.meal_text){ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${d}</div><div class="sub">${esc(m.meal_text)}</div></div>`; c5.appendChild(row);} });
   wrap.appendChild(c5);
 }
 
@@ -418,26 +421,39 @@ function taskRow(t){
 function renderTasks(){
   const wrap=$("#tasksContent"); wrap.innerHTML="";
   const order=[...PRIMARY_DAYS, ...DAYS.filter(d=>!PRIMARY_DAYS.includes(d))];
+  const doneToday=[];
   order.forEach(day=>{
-    const list=DATA.recurring_tasks.filter(t=>t.day===day).sort((a,b)=>a.position-b.position);
-    if(list.length===0 && !PRIMARY_DAYS.includes(day)) return;
+    const all=DATA.recurring_tasks.filter(t=>t.day===day).sort((a,b)=>a.position-b.position);
+    if(all.length===0 && !PRIMARY_DAYS.includes(day)) return;
+    const open=all.filter(t=>t.done_date!==todayStr());
+    all.filter(t=>t.done_date===todayStr()).forEach(t=>doneToday.push(t));
     const c=el("div","card"); c.appendChild(el("h3",null,dayEmoji(day)+" "+day));
-    if(list.length===0) c.appendChild(el("div","empty","No tasks yet."));
-    list.forEach(t=>{
-      const done=t.done_date===todayStr();
+    if(all.length===0) c.appendChild(el("div","empty","No tasks yet."));
+    else if(open.length===0) c.appendChild(el("div","empty","All done for "+day+" 🎉"));
+    open.forEach(t=>{
       const row=el("div","row");
-      const chk=el("div","check"+(done?" done":""),done?"✓":""); chk.onclick=()=>toggleTask(t);
-      const g=el("div","grow"); g.innerHTML=`<div class="title ${done?"done-text":""}">${esc(t.task)}</div>`;
+      const chk=el("div","check"); chk.onclick=()=>toggleTask(t);
+      const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>`;
       const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("recurring_tasks",t.id);
       row.appendChild(chk); row.appendChild(g); row.appendChild(del); c.appendChild(row);
     });
     const add=el("div","add-row");
     const inp=el("input"); inp.placeholder="Add a "+day+" task…";
-    const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ if(!inp.value.trim())return; await sb.from("recurring_tasks").insert({day,task:inp.value.trim(),position:list.length}); await refresh("recurring_tasks"); render(); };
+    const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ if(!inp.value.trim())return; await sb.from("recurring_tasks").insert({day,task:inp.value.trim(),position:all.length}); await refresh("recurring_tasks"); render(); };
     inp.addEventListener("keydown",e=>{if(e.key==="Enter")b.click();});
     add.appendChild(inp); add.appendChild(b); c.appendChild(add);
     wrap.appendChild(c);
   });
+  if(doneToday.length){
+    const dc=el("div","card"); dc.appendChild(el("h3",null,`✅ Done <span class="pill good">${doneToday.length}</span>`));
+    doneToday.forEach(t=>{
+      const row=el("div","row");
+      const chk=el("div","check done","✓"); chk.title="Undo"; chk.onclick=()=>toggleTask(t);
+      const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div><div class="sub">${t.day}</div>`;
+      row.appendChild(chk); row.appendChild(g); dc.appendChild(row);
+    });
+    wrap.appendChild(dc);
+  }
 }
 function dayEmoji(d){return ({Sunday:"🛒",Tuesday:"🧹",Friday:"✨"})[d]||"📅";}
 
@@ -617,24 +633,29 @@ function renderMeal(){
   wrap.appendChild(rot);
   // planner
   const plan=el("div","card"); plan.appendChild(el("h3",null,"🍽️ This week"));
-  DAYS.forEach(day=>{
+  MEAL_DAYS.forEach(day=>{
     const m=DATA.meal_plan.find(x=>x.day===day);
+    const has=!!(m && m.meal_text);
     const rowW=el("div","mealday");
     rowW.appendChild(el("div","d",day));
     const holder=el("div");
     const top=el("div"); top.style.cssText="display:flex;gap:6px;align-items:center";
-    const inp=el("input"); inp.placeholder="What's for dinner?"; inp.value=m?(m.meal_text||""):""; inp.style.flex="1";
+    const inp=el("input"); inp.placeholder="What's for dinner?"; inp.value=has?m.meal_text:""; inp.style.flex="1";
     inp.onchange=()=>saveMeal(day,inp.value);
     const star=el("button","icon-btn","☆"); star.title="Save to rotation"; star.style.color="var(--gold)"; star.onclick=()=>{ if(inp.value.trim()) saveMealToRotation(inp.value.trim()); else toast("Add a meal first."); };
     top.appendChild(inp); top.appendChild(star);
-    const sel=el("select"); sel.style.marginTop="6px";
-    let opts=`<option value="">— quick pick —</option>`;
-    DATA.meal_rotation.slice().sort((a,b)=>b.times_used-a.times_used).forEach(r=>opts+=`<option value="${escAttr(r.meal_text)}">⭐ ${esc(r.meal_text)}</option>`);
-    DATA.freezer_meals.forEach(f=>opts+=`<option value="🧊 ${escAttr(f.name)}">🧊 ${esc(f.name)} (${f.qty} left)</option>`);
-    DATA.recipes.forEach(r=>opts+=`<option value="${escAttr(r.title)}">📖 ${esc(r.title)}</option>`);
-    sel.innerHTML=opts;
-    sel.onchange=()=>{ if(sel.value){ inp.value=sel.value; saveMeal(day,sel.value); sel.value=""; } };
-    holder.appendChild(top); holder.appendChild(sel);
+    if(has){ const clr=el("button","icon-btn","✕"); clr.title="Clear this day"; clr.onclick=()=>saveMeal(day,""); top.appendChild(clr); }
+    holder.appendChild(top);
+    if(!has){
+      const sel=el("select"); sel.style.marginTop="6px";
+      let opts=`<option value="">— pick from rotation / freezer / recipes —</option>`;
+      DATA.meal_rotation.slice().sort((a,b)=>b.times_used-a.times_used).forEach(r=>opts+=`<option value="${escAttr(r.meal_text)}">⭐ ${esc(r.meal_text)}</option>`);
+      DATA.freezer_meals.forEach(f=>opts+=`<option value="🧊 ${escAttr(f.name)}">🧊 ${esc(f.name)} (${f.qty} left)</option>`);
+      DATA.recipes.forEach(r=>opts+=`<option value="${escAttr(r.title)}">📖 ${esc(r.title)}</option>`);
+      sel.innerHTML=opts;
+      sel.onchange=()=>{ if(sel.value) saveMeal(day,sel.value); };
+      holder.appendChild(sel);
+    }
     rowW.appendChild(holder); plan.appendChild(rowW);
   });
   const act=el("div","add-row"); act.style.marginTop="12px";
@@ -663,9 +684,22 @@ async function saveMealToRotation(text){
   else await sb.from("meal_rotation").insert({meal_text:text});
   await refresh("meal_rotation"); renderMeal(); toast("Saved to your rotation.");
 }
+async function autoMealWeekReset(){
+  const cur=weekStartFriday();
+  const prev=localStorage.getItem("hb_mealWeek");
+  if(prev===cur){ return; }
+  if(prev){
+    const rows=MEAL_DAYS.map(day=>{ const m=DATA.meal_plan.find(x=>x.day===day); return (m&&m.meal_text)?{week_start:prev, day, meal_text:m.meal_text}:null; }).filter(Boolean);
+    if(rows.length){ await sb.from("meal_history").delete().eq("week_start", prev); await sb.from("meal_history").insert(rows); }
+    await sb.from("meal_plan").delete().not("id","is",null);
+    await refresh("meal_plan"); await refresh("meal_history");
+    toast("New meal week (Fri–Thu) — last week saved, this one's blank.");
+  }
+  localStorage.setItem("hb_mealWeek", cur);
+}
 async function archiveWeek(){
-  const wk=weekKey();
-  const rows=DAYS.map(day=>{ const m=DATA.meal_plan.find(x=>x.day===day); return (m&&m.meal_text)?{week_start:wk, day, meal_text:m.meal_text}:null; }).filter(Boolean);
+  const wk=weekStartFriday();
+  const rows=MEAL_DAYS.map(day=>{ const m=DATA.meal_plan.find(x=>x.day===day); return (m&&m.meal_text)?{week_start:wk, day, meal_text:m.meal_text}:null; }).filter(Boolean);
   if(rows.length===0){ toast("Nothing planned to save yet."); return; }
   await sb.from("meal_history").delete().eq("week_start", wk);
   await sb.from("meal_history").insert(rows);
@@ -681,7 +715,7 @@ async function saveMeal(day,text){
   const existing=DATA.meal_plan.find(x=>x.day===day);
   if(existing){ await sb.from("meal_plan").update({meal_text:text}).eq("id",existing.id); existing.meal_text=text; }
   else { const {data}=await sb.from("meal_plan").insert({day,meal_text:text}).select(); if(data)DATA.meal_plan.push(data[0]); }
-  renderToday();
+  renderToday(); renderMeal();
 }
 $("#mp-suggest").onclick=async()=>{
   const pool=[...DATA.freezer_meals.filter(f=>f.qty>0).map(f=>"🧊 "+f.name), ...DATA.recipes.map(r=>r.title)];
