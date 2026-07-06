@@ -526,9 +526,14 @@ function renderPantry(){
     wrap.appendChild(c);
   });
   const c=el("div","card"); c.appendChild(el("h3",null,"➕ Add staple"));
+  const defaults=["Kitchen","Household","Bathroom","Cleaning","Paper goods","Pantry","Beverages","Personal care","Pet","Dispensary","Other"];
+  const existing=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))];
+  const catList=[...new Set([...existing, ...defaults])].filter(x=>x!=="Other").sort();
+  catList.push("Other");
+  const catOpts=catList.map(x=>`<option value="${escAttr(x)}">${esc(x)}</option>`).join("");
   const add=el("div","add-row");
-  add.innerHTML=`<input id="pt-name" placeholder="Item name"/><input id="pt-cat" placeholder="Category" style="max-width:130px"/><input id="pt-par" type="number" min="1" value="2" title="par" style="max-width:64px"/><input id="pt-cnt" type="number" min="0" value="0" title="have" style="max-width:64px"/>`;
-  const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ const n=$("#pt-name").value.trim(); if(!n)return; await sb.from("pantry_items").insert({name:n,category:($("#pt-cat").value.trim()||"Other"),par:+$("#pt-par").value||1,count:+$("#pt-cnt").value||0}); await refresh("pantry_items"); render(); };
+  add.innerHTML=`<input id="pt-name" placeholder="Item name"/><select id="pt-cat" style="max-width:150px">${catOpts}</select><input id="pt-par" type="number" min="1" value="2" title="par level" style="max-width:64px"/><input id="pt-cnt" type="number" min="0" value="0" title="have now" style="max-width:64px"/>`;
+  const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ const n=$("#pt-name").value.trim(); if(!n)return; await sb.from("pantry_items").insert({name:n,category:$("#pt-cat").value||"Other",par:+$("#pt-par").value||1,count:+$("#pt-cnt").value||0}); await refresh("pantry_items"); render(); };
   add.appendChild(b); c.appendChild(add); wrap.appendChild(c);
 }
 async function adjPantry(p,d){ const v=Math.max(0,p.count+d); await sb.from("pantry_items").update({count:v}).eq("id",p.id); p.count=v; render(); }
