@@ -209,8 +209,8 @@
     <!-- MEAL PLAN -->
     <section class="view" id="view-meal">
       <div class="view-head"><h2>This Week's Meals</h2><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="mp-suggest">Suggest a plan</button></div>
-      <p class="muted small" style="margin:-6px 0 14px">Pull from your freezer stash and saved recipes, or type in a meal.</p>
-      <div class="card"><div id="mealContent"></div></div>
+      <p class="muted small" style="margin:-6px 0 14px">Plan the week, save it, and build a rotation of go-to dinners over time.</p>
+      <div id="mealContent"></div>
     </section>
   </main>
 </div>
@@ -253,7 +253,7 @@ const todayName = ()=> DAYS[new Date().getDay()];
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
 
 /* cache */
-let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[]};
+let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[]};
 
 /* grocery store favorites (per-device preference) */
 const DEFAULT_STORES=["Wegmans","Whole Foods","Costco","Target","Safeway","Publix","Kroger","Trader Joe's","Instacart","Amazon"];
@@ -597,26 +597,85 @@ $("#rc-save").onclick=async()=>{
   $("#recipeModal").close(); await refresh("recipes"); render(); toast("Recipe saved.");
 };
 
-/* MEAL PLAN */
+/* MEAL PLAN + ROTATION + HISTORY */
 function renderMeal(){
-  const wrap=$("#mealContent"); wrap.innerHTML="";
+  const wrap=$("#mealContent"); if(!wrap) return; wrap.innerHTML="";
+  // rotation
+  const rot=el("div","card"); rot.appendChild(el("h3",null,"⭐ Your rotation "+(DATA.meal_rotation.length?`<span class="pill">${DATA.meal_rotation.length}</span>`:"")));
+  if(DATA.meal_rotation.length===0) rot.appendChild(el("div","empty","No saved meals yet. Tap the ☆ on any dinner below to add it to your rotation."));
+  else {
+    const chips=el("div"); chips.style.cssText="display:flex;flex-wrap:wrap;gap:6px";
+    DATA.meal_rotation.slice().sort((a,b)=>b.times_used-a.times_used).forEach(r=>{
+      const chip=el("span","tag"); chip.style.cssText="font-size:13px;padding:5px 10px;display:inline-flex;align-items:center;gap:8px";
+      chip.innerHTML=`⭐ ${esc(r.meal_text)} <span class="muted">×${r.times_used}</span>`;
+      const x=el("span",null,"✕"); x.style.cssText="cursor:pointer;color:var(--muted)"; x.onclick=()=>delRow("meal_rotation",r.id);
+      chip.appendChild(x); chips.appendChild(chip);
+    });
+    rot.appendChild(chips);
+    rot.appendChild(el("div","small muted","These appear as ⭐ quick-picks in each day's menu below."));
+  }
+  wrap.appendChild(rot);
+  // planner
+  const plan=el("div","card"); plan.appendChild(el("h3",null,"🍽️ This week"));
   DAYS.forEach(day=>{
     const m=DATA.meal_plan.find(x=>x.day===day);
     const rowW=el("div","mealday");
     rowW.appendChild(el("div","d",day));
     const holder=el("div");
-    const inp=el("input"); inp.placeholder="What's for dinner?"; inp.value=m?(m.meal_text||""):"";
+    const top=el("div"); top.style.cssText="display:flex;gap:6px;align-items:center";
+    const inp=el("input"); inp.placeholder="What's for dinner?"; inp.value=m?(m.meal_text||""):""; inp.style.flex="1";
     inp.onchange=()=>saveMeal(day,inp.value);
+    const star=el("button","icon-btn","☆"); star.title="Save to rotation"; star.style.color="var(--gold)"; star.onclick=()=>{ if(inp.value.trim()) saveMealToRotation(inp.value.trim()); else toast("Add a meal first."); };
+    top.appendChild(inp); top.appendChild(star);
     const sel=el("select"); sel.style.marginTop="6px";
-    let opts=`<option value="">— quick pick from your stash —</option>`;
+    let opts=`<option value="">— quick pick —</option>`;
+    DATA.meal_rotation.slice().sort((a,b)=>b.times_used-a.times_used).forEach(r=>opts+=`<option value="${escAttr(r.meal_text)}">⭐ ${esc(r.meal_text)}</option>`);
     DATA.freezer_meals.forEach(f=>opts+=`<option value="🧊 ${escAttr(f.name)}">🧊 ${esc(f.name)} (${f.qty} left)</option>`);
     DATA.recipes.forEach(r=>opts+=`<option value="${escAttr(r.title)}">📖 ${esc(r.title)}</option>`);
     sel.innerHTML=opts;
     sel.onchange=()=>{ if(sel.value){ inp.value=sel.value; saveMeal(day,sel.value); sel.value=""; } };
-    holder.appendChild(inp); holder.appendChild(sel);
-    rowW.appendChild(holder);
-    wrap.appendChild(rowW);
+    holder.appendChild(top); holder.appendChild(sel);
+    rowW.appendChild(holder); plan.appendChild(rowW);
   });
+  const act=el("div","add-row"); act.style.marginTop="12px";
+  const saveW=el("button","btn btn-gold btn-sm","💾 Save this week"); saveW.onclick=archiveWeek;
+  act.appendChild(saveW); plan.appendChild(act);
+  plan.appendChild(el("div","small muted","Saving keeps a copy you can review later. Meals you plan often get suggested for your rotation."));
+  wrap.appendChild(plan);
+  // history
+  if(DATA.meal_history.length){
+    const weeks=[...new Set(DATA.meal_history.map(h=>h.week_start))].sort().reverse();
+    const hc=el("div","card"); hc.appendChild(el("h3",null,"📚 Past weeks"));
+    weeks.slice(0,10).forEach(wk=>{
+      const rows=DATA.meal_history.filter(h=>h.week_start===wk && h.meal_text);
+      const det=document.createElement("details"); const sum=document.createElement("summary");
+      sum.style.cssText="cursor:pointer;font-weight:700;padding:8px 0;color:var(--teal-d)"; sum.textContent="Week of "+wk;
+      det.appendChild(sum);
+      rows.forEach(r=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${r.day}</div><div class="sub">${esc(r.meal_text)}</div></div>`; det.appendChild(row); });
+      hc.appendChild(det);
+    });
+    wrap.appendChild(hc);
+  }
+}
+async function saveMealToRotation(text){
+  const ex=DATA.meal_rotation.find(r=>r.meal_text.toLowerCase()===text.toLowerCase());
+  if(ex) await sb.from("meal_rotation").update({times_used:ex.times_used+1}).eq("id",ex.id);
+  else await sb.from("meal_rotation").insert({meal_text:text});
+  await refresh("meal_rotation"); renderMeal(); toast("Saved to your rotation.");
+}
+async function archiveWeek(){
+  const wk=weekKey();
+  const rows=DAYS.map(day=>{ const m=DATA.meal_plan.find(x=>x.day===day); return (m&&m.meal_text)?{week_start:wk, day, meal_text:m.meal_text}:null; }).filter(Boolean);
+  if(rows.length===0){ toast("Nothing planned to save yet."); return; }
+  await sb.from("meal_history").delete().eq("week_start", wk);
+  await sb.from("meal_history").insert(rows);
+  await refresh("meal_history");
+  const counts={};
+  DATA.meal_history.forEach(h=>{ if(h.meal_text){ const k=h.meal_text.toLowerCase(); (counts[k]=counts[k]||{weeks:new Set(),text:h.meal_text}).weeks.add(h.week_start); } });
+  const inRot=new Set(DATA.meal_rotation.map(r=>r.meal_text.toLowerCase()));
+  const freq=Object.values(counts).filter(c=>c.weeks.size>=2 && !inRot.has(c.text.toLowerCase()));
+  renderMeal(); toast("This week saved to history.");
+  for(const c of freq){ if(confirm(`You've planned "${c.text}" ${c.weeks.size} weeks — add it to your rotation?`)) await saveMealToRotation(c.text); }
 }
 async function saveMeal(day,text){
   const existing=DATA.meal_plan.find(x=>x.day===day);
