@@ -110,6 +110,7 @@
     <div class="brand"><span class="dot">🏡</span> Home Base</div>
     <div class="spacer"></div>
     <span class="whoami" id="whoami"></span>
+    <button class="btn btn-ghost btn-sm" id="invite">Invite</button>
     <button class="btn btn-ghost btn-sm" id="signout">Sign out</button>
   </header>
   <nav class="tabs" id="tabs">
@@ -251,7 +252,8 @@ const SUPABASE_URL      = "https://wjuejftzrrfhdurfpukd.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndqdWVqZnR6cnJmaGR1cmZwdWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyODM3MzgsImV4cCI6MjA5ODg1OTczOH0.Vwq65gSEFdy6vctBiiyiIeblTDJuwph12qmOXv3pb6A";
 /* ======================================================== */
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: "homebase-auth" } });
+let CURRENT_HH = null;
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const PRIMARY_DAYS = ["Sunday","Tuesday","Friday"];
 const MEAL_DAYS = ["Friday","Saturday","Sunday","Monday","Tuesday","Wednesday","Thursday"]; // meal week runs Fri -> Thu
@@ -288,6 +290,14 @@ $("#sendLink").onclick = async ()=>{
 };
 $("#email").addEventListener("keydown",e=>{if(e.key==="Enter")$("#sendLink").click();});
 $("#signout").onclick = async ()=>{ await sb.auth.signOut(); location.reload(); };
+$("#invite").onclick = async ()=>{
+  const email=(prompt("Invite someone to your household — enter their email:")||"").trim().toLowerCase();
+  if(!email) return;
+  if(!CURRENT_HH){ toast("Couldn't find your household yet — try again in a moment."); return; }
+  const {error}=await sb.from("household_invites").insert({email, household_id:CURRENT_HH});
+  if(error) toast("Invite failed: "+error.message);
+  else toast("Invited "+email+" — they'll join automatically when they sign in with that email.");
+};
 
 sb.auth.onAuthStateChange((_e,session)=>{ if(session) enterApp(session); });
 sb.auth.getSession().then(({data})=>{ if(data.session) enterApp(data.session); });
@@ -298,6 +308,7 @@ async function enterApp(session){
   $("#login").classList.add("hidden");
   $("#app").classList.remove("hidden");
   $("#whoami").textContent = session.user.email;
+  try { const {data}=await sb.from("household_members").select("household_id").limit(1); if(data&&data[0]) CURRENT_HH=data[0].household_id; } catch(e){}
   await loadAll();
   await autoWeeklyRefresh();
   await autoMealWeekReset();
