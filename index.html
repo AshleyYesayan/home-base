@@ -232,12 +232,15 @@ function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");cl
 let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[]};
 
 /* grocery store favorites (per-device preference) */
-const DEFAULT_STORES=["Wegmans","Whole Foods","Costco","Target","Safeway","Publix","Kroger","Trader Joe's","Instacart"];
+const DEFAULT_STORES=["Wegmans","Whole Foods","Costco","Target","Safeway","Publix","Kroger","Trader Joe's","Instacart","Amazon"];
 function getStores(){ try{ return JSON.parse(localStorage.getItem('hb_stores')||'null')||DEFAULT_STORES.slice(); }catch(e){ return DEFAULT_STORES.slice(); } }
 function getStore(){ return localStorage.getItem('hb_store')||'Wegmans'; }
 function setStore(s){ localStorage.setItem('hb_store', s); }
 function addStore(s){ const st=getStores(); if(!st.includes(s)){ st.push(s); localStorage.setItem('hb_stores', JSON.stringify(st)); } }
 function storeSearchUrl(store, items){ return "https://www.google.com/search?q="+encodeURIComponent(store+" grocery delivery "+items.join(", ")); }
+function instacartUrl(item){ return "https://www.instacart.com/store/wegmans/search/"+encodeURIComponent(item); }
+function amazonUrl(item){ return "https://www.amazon.com/s?k="+encodeURIComponent(item); }
+function copyList(items){ try{ navigator.clipboard.writeText(items.join(", ")); toast("Restock list copied — paste it in the store search."); }catch(e){ toast("Couldn't copy list."); } }
 
 /* ---------- AUTH ---------- */
 $("#sendLink").onclick = async ()=>{
@@ -448,8 +451,22 @@ function renderPantry(){
   wrap.appendChild(gs);
   const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Restock list "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
   if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
-  low.forEach(p=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(p.name)}</div><div class="sub">Buy ${p.par-p.count} · ${p.count}/${p.par}</div></div>`; rc.appendChild(row); });
-  if(low.length){ const ob=el("button","btn btn-gold btn-sm","🛒 Search these at "+getStore()); ob.style.marginTop="10px"; ob.onclick=()=>window.open(storeSearchUrl(getStore(), low.map(p=>p.name)),"_blank"); rc.appendChild(ob); }
+  low.forEach(p=>{
+    const row=el("div","row");
+    const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)}</div><div class="sub">Buy ${p.par-p.count} · ${p.count}/${p.par}</div>`;
+    const links=el("div"); links.style.cssText="display:flex;gap:6px;flex:none";
+    const ic=el("button","btn btn-sm btn-ghost","🛒"); ic.title="Add on Instacart (Wegmans)"; ic.onclick=()=>window.open(instacartUrl(p.name),"_blank","noopener");
+    const az=el("button","btn btn-sm btn-ghost","📦"); az.title="Add on Amazon"; az.onclick=()=>window.open(amazonUrl(p.name),"_blank","noopener");
+    links.appendChild(ic); links.appendChild(az);
+    row.appendChild(g); row.appendChild(links); rc.appendChild(row);
+  });
+  if(low.length){
+    const actions=el("div","add-row"); actions.style.marginTop="12px";
+    const allIc=el("button","btn btn-gold btn-sm","🛒 Send list to Instacart (Wegmans)"); allIc.onclick=()=>{ copyList(low.map(p=>p.name)); window.open("https://www.instacart.com/store/wegmans/storefront","_blank","noopener"); };
+    const allAz=el("button","btn btn-sm","📦 Send list to Amazon"); allAz.onclick=()=>{ copyList(low.map(p=>p.name)); window.open("https://www.amazon.com/","_blank","noopener"); };
+    actions.appendChild(allIc); actions.appendChild(allAz); rc.appendChild(actions);
+    rc.appendChild(el("div","small muted","The 🛒 / 📦 on each item open it ready to add. The two buttons open the store and copy your whole list to paste into search."));
+  }
   wrap.appendChild(rc);
   cats.forEach(cat=>{
     const items=DATA.pantry_items.filter(p=>(p.category||"Other")===cat);
