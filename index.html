@@ -136,11 +136,9 @@
     <button class="btn btn-ghost btn-sm" id="signout">Sign out</button>
   </header>
   <nav class="tabs" id="tabs">
-    <button data-v="today" class="active">Today</button>
+    <button data-v="today" class="active">Dashboard</button>
     <button data-v="tasks">Tasks</button>
-    <button data-v="weekly">This Week</button>
     <button data-v="handyman">Handyman</button>
-    <button data-v="upcoming">Upcoming</button>
     <button data-v="reminders">Reminders</button>
     <button data-v="pantry">Backstock</button>
     <button data-v="freezer">Freezer</button>
@@ -149,10 +147,16 @@
   </nav>
 
   <main>
-    <!-- TODAY -->
+    <!-- DASHBOARD (Today + This Week + Upcoming) -->
     <section class="view active" id="view-today">
-      <div class="view-head"><h2 id="todayHead">Today</h2></div>
+      <div class="view-head"><h2 id="todayHead">Dashboard</h2></div>
       <div id="todayContent"></div>
+      <div class="view-head" style="margin-top:26px"><h2>This Week</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Extra one-off tasks to get done this week. Check them off as you go.</p>
+      <div id="weeklyContent"></div>
+      <div class="view-head" style="margin-top:26px"><h2>Upcoming</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Everything with a date ahead, soonest first. Tap a date to reschedule it.</p>
+      <div id="upcomingContent"></div>
     </section>
 
     <!-- TASKS -->
@@ -162,12 +166,6 @@
       <div id="tasksContent"></div>
     </section>
 
-    <!-- THIS WEEK -->
-    <section class="view" id="view-weekly">
-      <div class="view-head"><h2>This Week</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Extra one-off tasks to get done this week. Check them off as you go.</p>
-      <div id="weeklyContent"></div>
-    </section>
 
     <!-- HANDYMAN -->
     <section class="view" id="view-handyman">
@@ -176,12 +174,6 @@
       <div id="handymanContent"></div>
     </section>
 
-    <!-- UPCOMING -->
-    <section class="view" id="view-upcoming">
-      <div class="view-head"><h2>Upcoming</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Everything with a date ahead, soonest first. Tap a date to reschedule it.</p>
-      <div id="upcomingContent"></div>
-    </section>
 
     <!-- REMINDERS -->
     <section class="view" id="view-reminders">
@@ -316,11 +308,21 @@ function amazonCartUrl(list){
    item. You pick the exact one you want, copy its link, come back, tap
    Paste. No hunting for a URL before you start. ------------------------- */
 let PICKING = null;   // id of the staple we're linking right now
+/* iOS blocks window.open inside the installed app, so every store link is a REAL
+   anchor. The anchor navigates on its own; we only flag which item we're picking. */
+function aBtn(cls,label,href,onclick){
+  const a=document.createElement("a");
+  a.className=cls; a.textContent=label;
+  a.href=href; a.target="_blank"; a.rel="noopener";
+  a.style.textDecoration="none";
+  a.style.display="inline-flex"; a.style.alignItems="center"; a.style.justifyContent="center"; a.style.gap="6px";
+  if(onclick) a.addEventListener("click",onclick);
+  return a;
+}
 function startPick(p){
   PICKING = p.id;
-  window.open(amazonUrl(p.name), "_blank", "noopener");
-  render();
-  setTimeout(()=>{ const b=$("#pickPaste"); if(b) b.scrollIntoView({block:"center",behavior:"smooth"}); }, 60);
+  // re-render after the anchor has handed off to Amazon
+  setTimeout(()=>{ render(); const b=$("#pickPaste"); if(b) b.scrollIntoView({block:"center",behavior:"smooth"}); }, 120);
 }
 function cancelPick(){ PICKING=null; render(); }
 async function unlinkAmazon(p){
@@ -357,7 +359,7 @@ function pickCard(){
   c.appendChild(el("div","small muted","Amazon just opened in a new tab. Choose the one you want, copy its link (Share → Copy Link), then come back here and tap Paste."));
   const row = el("div","add-row");
   const pasteB = el("button","btn btn-gold","📋 Paste Amazon link"); pasteB.id="pickPaste"; pasteB.onclick=pasteForPick;
-  const openB = el("button","btn btn-ghost btn-sm","Reopen Amazon"); openB.onclick=()=>window.open(amazonUrl(p.name),"_blank","noopener");
+  const openB = aBtn("btn btn-ghost btn-sm","Reopen Amazon", amazonUrl(p.name));
   row.appendChild(pasteB); row.appendChild(openB);
   if(p.amazon_asin){ const un=el("button","btn btn-ghost btn-sm","Unlink"); un.onclick=()=>unlinkAmazon(p); row.appendChild(un); }
   const cx=el("button","btn btn-ghost btn-sm","Cancel"); cx.onclick=cancelPick; row.appendChild(cx);
@@ -488,7 +490,7 @@ $("#tabs").addEventListener("click",e=>{
 function render(){ renderToday(); renderTasks(); renderWeekly(); renderHandyman(); renderUpcoming(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
 
 function renderToday(){
-  $("#todayHead").textContent = todayName()+" — Today";
+  $("#todayHead").textContent = todayName()+" — Dashboard";
   const wrap=$("#todayContent"); wrap.innerHTML="";
   const tn=todayName();
   // today's tasks
@@ -497,13 +499,7 @@ function renderToday(){
   if(tt.length===0) c1.appendChild(el("div","empty","Nothing scheduled for "+tn+"."));
   [...tt.filter(t=>t.done_date!==todayStr()), ...tt.filter(t=>t.done_date===todayStr())].forEach(t=>c1.appendChild(taskRow(t)));
   wrap.appendChild(c1);
-  // this week's extra tasks
-  const wk=DATA.weekly_tasks.filter(t=>!t.done);
-  if(wk.length){
-    const cw=el("div","card"); cw.appendChild(el("h3",null,"📌 This week"));
-    wk.forEach(t=>{ const row=el("div","row"); const chk=el("div","check"); chk.onclick=()=>toggleWeekly(t,true); const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>`; row.appendChild(chk); row.appendChild(g); cw.appendChild(row); });
-    wrap.appendChild(cw);
-  }
+
   // reminders due
   const due=DATA.reminders.map(r=>({r,d:nextDue(r)})).filter(x=>x.d&&daysUntil(x.d)<=7).sort((a,b)=>a.d-b.d);
   const c2=el("div","card"); c2.appendChild(el("h3",null,"🔔 Upkeep due soon"));
@@ -625,10 +621,9 @@ function renderPantry(){
     const tag=p.amazon_asin?'<span class="pill">📦 linked</span>':'';
     const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${tag}</div><div class="sub">Buy ${need} — have ${p.count}, par ${p.par}</div>`;
     const links=el("div"); links.style.cssText="display:flex;gap:6px;flex:none";
-    const ic=el("button","btn btn-sm btn-ghost","🛒"); ic.title="Add on Instacart (Wegmans)"; ic.onclick=()=>window.open(instacartUrl(p.name),"_blank","noopener");
-    const az=el("button","btn btn-sm btn-ghost","📦"); az.title=p.amazon_asin?"Add this to Amazon cart":"Search on Amazon";
-    az.onclick=()=>window.open(p.amazon_asin?amazonCartUrl([{asin:p.amazon_asin,qty:need}]):amazonUrl(p.name),"_blank","noopener");
-    const lk=el("button","btn btn-sm btn-ghost",p.amazon_asin?"🔗":"🔎"); lk.title=p.amazon_asin?"Pick a different one on Amazon":"Pick it on Amazon"; lk.onclick=()=>startPick(p);
+    const ic=aBtn("btn btn-sm btn-ghost","🛒",instacartUrl(p.name)); ic.title="Add on Instacart (Wegmans)";
+    const az=aBtn("btn btn-sm btn-ghost","📦", p.amazon_asin?amazonCartUrl([{asin:p.amazon_asin,qty:need}]):amazonUrl(p.name)); az.title=p.amazon_asin?"Add this to Amazon cart":"Search on Amazon";
+    const lk=aBtn("btn btn-sm btn-ghost",p.amazon_asin?"🔗":"🔎", amazonUrl(p.name), ()=>startPick(p)); lk.title=p.amazon_asin?"Pick a different one on Amazon":"Pick it on Amazon";
     links.appendChild(ic); links.appendChild(az); links.appendChild(lk);
     row.appendChild(g); row.appendChild(links); rc.appendChild(row);
   });
@@ -636,10 +631,13 @@ function renderPantry(){
     const linked=low.filter(p=>p.amazon_asin).map(p=>({asin:p.amazon_asin,qty:Math.max(1,p.par-p.count),name:p.name}));
     const unlinked=low.filter(p=>!p.amazon_asin);
     const actions=el("div","add-row"); actions.style.marginTop="12px";
-    const allIc=el("button","btn btn-gold btn-sm","🛒 Send list to Instacart (Wegmans)"); allIc.onclick=()=>{ copyList(low.map(p=>`${p.name} x${Math.max(1,p.par-p.count)}`)); window.open("https://www.instacart.com/store/wegmans/storefront","_blank","noopener"); };
-    const allAz=el("button","btn btn-sm",linked.length?`📦 Add ${linked.length} to Amazon cart`:"📦 Add to Amazon cart");
-    allAz.disabled=linked.length===0;
-    allAz.onclick=()=>{ window.open(amazonCartUrl(linked),"_blank","noopener"); toast(`Sending ${linked.length} item${linked.length===1?"":"s"} to your Amazon cart.`); };
+    const allIc=aBtn("btn btn-gold btn-sm","🛒 Send list to Instacart (Wegmans)","https://www.instacart.com/store/wegmans/storefront",()=>copyList(low.map(p=>`${p.name} x${Math.max(1,p.par-p.count)}`)));
+    let allAz;
+    if(linked.length){
+      allAz=aBtn("btn btn-sm",`📦 Add ${linked.length} to Amazon cart`, amazonCartUrl(linked), ()=>toast(`Sending ${linked.length} item${linked.length===1?"":"s"} to your Amazon cart.`));
+    } else {
+      allAz=el("button","btn btn-sm","📦 Add to Amazon cart"); allAz.disabled=true;
+    }
     actions.appendChild(allIc); actions.appendChild(allAz); rc.appendChild(actions);
     if(linked.length){
       rc.appendChild(el("div","small muted",`One tap drops all ${linked.length} linked item${linked.length===1?"":"s"} into your Amazon cart at the right quantities — you just check out.`));
@@ -647,8 +645,7 @@ function renderPantry(){
     if(unlinked.length){
       const hint=el("div","small muted",`${unlinked.length} item${unlinked.length===1?" isn't":"s aren't"} linked yet. Tap 🔎 to pick it on Amazon — you only do this once per item.`);
       rc.appendChild(hint);
-      const pickAll=el("button","btn btn-ghost btn-sm",`🔎 Pick ${unlinked[0].name} on Amazon`); pickAll.style.marginTop="8px";
-      pickAll.onclick=()=>startPick(unlinked[0]);
+      const pickAll=aBtn("btn btn-ghost btn-sm",`🔎 Pick ${unlinked[0].name} on Amazon`, amazonUrl(unlinked[0].name), ()=>startPick(unlinked[0])); pickAll.style.marginTop="8px";
       rc.appendChild(pickAll);
     }
   }
@@ -672,7 +669,7 @@ function renderPantry(){
       const plus=el("button",null,"+"); plus.onclick=()=>adjPantry(p,1);
       q.appendChild(minus); q.appendChild(badge); q.appendChild(plus);
       const qw=el("div","qty-wrap"); qw.appendChild(el("div","qty-cap","Have")); qw.appendChild(q);
-      const lk=el("button","icon-btn",p.amazon_asin?"🔗":"🔎"); lk.title=p.amazon_asin?"Pick a different one on Amazon":"Pick it on Amazon"; lk.onclick=()=>startPick(p);
+      const lk=aBtn("icon-btn",p.amazon_asin?"🔗":"🔎", amazonUrl(p.name), ()=>startPick(p)); lk.title=p.amazon_asin?"Pick a different one on Amazon":"Pick it on Amazon";
       const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("pantry_items",p.id);
       row.appendChild(g); row.appendChild(pw); row.appendChild(qw); row.appendChild(lk); row.appendChild(del); c.appendChild(row);
     });
