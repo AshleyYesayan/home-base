@@ -300,7 +300,9 @@ function setStore(s){ localStorage.setItem('hb_store', s); }
 function addStore(s){ const st=getStores(); if(!st.includes(s)){ st.push(s); localStorage.setItem('hb_stores', JSON.stringify(st)); } }
 function storeSearchUrl(store, items){ return "https://www.google.com/search?q="+encodeURIComponent(store+" grocery delivery "+items.join(", ")); }
 function instacartUrl(item){ return "https://www.instacart.com/store/wegmans/search/"+encodeURIComponent(item); }
-function amazonUrl(item){ return "https://www.amazon.com/s?k="+encodeURIComponent(item); }
+// Amazon Associates tracking ID — rides on every Amazon link the app opens.
+const AMZN_TAG = "onevillage09-20";
+function amazonUrl(item){ return "https://www.amazon.com/s?k="+encodeURIComponent(item)+"&tag="+AMZN_TAG; }
 // Pull the 10-char ASIN out of any Amazon product link (or accept a bare ASIN).
 function asinFrom(v){
   const s=String(v||"").trim();
@@ -311,7 +313,7 @@ function asinFrom(v){
 // One URL that drops every linked item straight into the Amazon cart.
 function amazonCartUrl(list){
   const qs=list.map((x,i)=>`ASIN.${i+1}=${encodeURIComponent(x.asin)}&Quantity.${i+1}=${x.qty}`).join("&");
-  return "https://www.amazon.com/gp/aws/cart/add.html?"+qs;
+  return "https://www.amazon.com/gp/aws/cart/add.html?AssociateTag="+AMZN_TAG+"&"+qs;
 }
 /* ---- "Pick it on Amazon" flow -------------------------------------------
    Tap the link button and we send you straight to Amazon search for that
