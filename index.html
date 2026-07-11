@@ -636,7 +636,7 @@ function renderPantry(){
     const linked=low.filter(p=>p.amazon_asin).map(p=>({asin:p.amazon_asin,qty:Math.max(1,p.par-p.count),name:p.name}));
     const unlinked=low.filter(p=>!p.amazon_asin);
     const actions=el("div","add-row"); actions.style.marginTop="12px";
-    const allIc=el("button","btn btn-gold btn-sm","🛒 Send list to Instacart (Wegmans)"); allIc.onclick=()=>{ copyList(low.map(p=>p.name)); window.open("https://www.instacart.com/store/wegmans/storefront","_blank","noopener"); };
+    const allIc=el("button","btn btn-gold btn-sm","🛒 Send list to Instacart (Wegmans)"); allIc.onclick=()=>{ copyList(low.map(p=>`${p.name} x${Math.max(1,p.par-p.count)}`)); window.open("https://www.instacart.com/store/wegmans/storefront","_blank","noopener"); };
     const allAz=el("button","btn btn-sm",linked.length?`📦 Add ${linked.length} to Amazon cart`:"📦 Add to Amazon cart");
     allAz.disabled=linked.length===0;
     allAz.onclick=()=>{ window.open(amazonCartUrl(linked),"_blank","noopener"); toast(`Sending ${linked.length} item${linked.length===1?"":"s"} to your Amazon cart.`); };
@@ -659,7 +659,13 @@ function renderPantry(){
     items.forEach(p=>{
       const row=el("div","row");
       const short=Math.max(0,p.par-p.count);
-      const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${belowPar(p)?'<span class="pill bad">low</span>':''}</div><div class="sub">Par ${p.par} · ${short?`buy ${short}`:"stocked"}${p.amazon_asin?" · 📦 linked":""}</div>`;
+      const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${belowPar(p)?'<span class="pill bad">low</span>':''}</div><div class="sub">${short?`Buy ${short}`:"Stocked"}${p.amazon_asin?" · 📦 linked":""}</div>`;
+      const pq=el("div","qty");
+      const pmi=el("button",null,"−"); pmi.onclick=()=>adjPar(p,-1);
+      const pbg=el("span","count-badge",p.par);
+      const ppl=el("button",null,"+"); ppl.onclick=()=>adjPar(p,1);
+      pq.appendChild(pmi); pq.appendChild(pbg); pq.appendChild(ppl);
+      const pw=el("div","qty-wrap"); pw.appendChild(el("div","qty-cap","Par")); pw.appendChild(pq);
       const q=el("div","qty");
       const minus=el("button",null,"−"); minus.onclick=()=>adjPantry(p,-1);
       const badge=el("span","count-badge",p.count);
@@ -668,7 +674,7 @@ function renderPantry(){
       const qw=el("div","qty-wrap"); qw.appendChild(el("div","qty-cap","Have")); qw.appendChild(q);
       const lk=el("button","icon-btn",p.amazon_asin?"🔗":"🔎"); lk.title=p.amazon_asin?"Pick a different one on Amazon":"Pick it on Amazon"; lk.onclick=()=>startPick(p);
       const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("pantry_items",p.id);
-      row.appendChild(g); row.appendChild(qw); row.appendChild(lk); row.appendChild(del); c.appendChild(row);
+      row.appendChild(g); row.appendChild(pw); row.appendChild(qw); row.appendChild(lk); row.appendChild(del); c.appendChild(row);
     });
     wrap.appendChild(c);
   });
@@ -685,7 +691,18 @@ function renderPantry(){
   c.appendChild(el("div","small muted","The Amazon link is optional here — easier to add it later by tapping 🔎 next to the item, which takes you straight to Amazon to pick the one you want."));
   wrap.appendChild(c);
 }
-async function adjPantry(p,d){ const v=Math.max(0,p.count+d); await sb.from("pantry_items").update({count:v}).eq("id",p.id); p.count=v; render(); }
+async function adjPantry(p,d){
+  const v=Math.max(0,p.count+d);
+  const {error}=await sb.from("pantry_items").update({count:v}).eq("id",p.id);
+  if(error){ toast("Couldn't save — "+error.message); return; }
+  p.count=v; render();
+}
+async function adjPar(p,d){
+  const v=Math.max(1,p.par+d);
+  const {error}=await sb.from("pantry_items").update({par:v}).eq("id",p.id);
+  if(error){ toast("Couldn't save — "+error.message); return; }
+  p.par=v; render();
+}
 
 function renderFreezer(){
   const wrap=$("#freezerList"); wrap.innerHTML="";
