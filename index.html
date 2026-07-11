@@ -56,6 +56,12 @@
   main{max-width:920px;margin:0 auto;padding:20px 16px 80px}
   section.view{display:none}
   section.view.active{display:block}
+  /* segmented sub-tabs inside a merged tab */
+  nav.subtabs{display:flex;gap:4px;background:#ece8df;padding:4px;border-radius:12px;margin:0 0 16px}
+  nav.subtabs button{flex:1;background:none;border:none;padding:9px 8px;border-radius:9px;font-size:13.5px;font-weight:800;color:var(--muted);white-space:nowrap}
+  nav.subtabs button.active{background:var(--card);color:var(--teal-d);box-shadow:0 1px 2px rgba(0,0,0,.07)}
+  .pane{display:none}
+  .pane.active{display:block}
   .view-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .view-head h2{font-size:22px;font-weight:800}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
@@ -138,12 +144,8 @@
   <nav class="tabs" id="tabs">
     <button data-v="today" class="active">Dashboard</button>
     <button data-v="tasks">Tasks</button>
-    <button data-v="handyman">Handyman</button>
-    <button data-v="reminders">Reminders</button>
-    <button data-v="pantry">Backstock</button>
-    <button data-v="freezer">Freezer</button>
-    <button data-v="recipes">Recipes</button>
-    <button data-v="meal">Meal Plan</button>
+    <button data-v="pantry">Stock</button>
+    <button data-v="meal">Kitchen</button>
   </nav>
 
   <main>
@@ -159,81 +161,89 @@
       <div id="upcomingContent"></div>
     </section>
 
-    <!-- TASKS -->
+    <!-- TASKS (Recurring | Handyman | Upkeep) -->
     <section class="view" id="view-tasks">
-      <div class="view-head"><h2>Recurring Tasks</h2><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
-      <p class="muted small" style="margin:-6px 0 14px">Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it auto-resets each Sunday).</p>
-      <div id="tasksContent"></div>
-    </section>
-
-
-    <!-- HANDYMAN -->
-    <section class="view" id="view-handyman">
-      <div class="view-head"><h2>Handyman</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">A running list for the handyman who comes as needed. Add items anytime; check them off when they're done.</p>
-      <div id="handymanContent"></div>
-    </section>
-
-
-    <!-- REMINDERS -->
-    <section class="view" id="view-reminders">
-      <div class="view-head"><h2>Reminders</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Interval upkeep — air filters, koi pond, and anything else on a clock.</p>
-      <div class="card">
-        <div id="remindersList"></div>
-        <div class="add-row">
-          <input id="rm-name" placeholder="e.g. Replace water filter" />
-          <input id="rm-n" type="number" min="1" value="2" style="max-width:70px" />
-          <select id="rm-unit" style="max-width:120px"><option value="weeks">weeks</option><option value="months" selected>months</option><option value="years">years</option></select>
-          <button class="btn btn-sm" id="rm-add">Add</button>
+      <div class="view-head"><h2>Tasks</h2></div>
+      <nav class="subtabs">
+        <button data-s="pane-recurring" class="active">Recurring</button>
+        <button data-s="pane-handyman">Handyman</button>
+        <button data-s="pane-upkeep">Upkeep</button>
+      </nav>
+      <div class="pane active" id="pane-recurring">
+        <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
+        <p class="muted small" style="margin:0 0 14px">Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it auto-resets each Sunday).</p>
+        <div id="tasksContent"></div>
+      </div>
+      <div class="pane" id="pane-handyman">
+        <p class="muted small" style="margin:0 0 14px">A running list for the handyman who comes as needed. Add items anytime; check them off when they're done.</p>
+        <div id="handymanContent"></div>
+      </div>
+      <div class="pane" id="pane-upkeep">
+        <p class="muted small" style="margin:0 0 14px">Interval upkeep — air filters, koi pond, and anything else on a clock.</p>
+        <div class="card">
+          <div id="remindersList"></div>
+          <div class="add-row">
+            <input id="rm-name" placeholder="e.g. Replace water filter" />
+            <input id="rm-n" type="number" min="1" value="2" style="max-width:70px" />
+            <select id="rm-unit" style="max-width:120px"><option value="weeks">weeks</option><option value="months" selected>months</option><option value="years">years</option></select>
+            <button class="btn btn-sm" id="rm-add">Add</button>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- PANTRY -->
+    <!-- STOCK (Supplies | Freezer) -->
     <section class="view" id="view-pantry">
-      <div class="view-head"><h2>Backstock</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Set a par (how many you like on hand). Anything below par lands on your restock list.</p>
-      <div id="pantryContent"></div>
-    </section>
-
-    <!-- FREEZER -->
-    <section class="view" id="view-freezer">
-      <div class="view-head"><h2>Freezer Inventory</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Track your prepped portions. Tap − as you eat them.</p>
-      <div class="card">
-        <div id="freezerList"></div>
-        <div class="add-row">
-          <input id="fz-name" placeholder="Meal name" />
-          <input id="fz-qty" type="number" min="0" value="1" style="max-width:70px" />
-          <button class="btn btn-sm" id="fz-add">Add</button>
+      <div class="view-head"><h2>Stock</h2></div>
+      <nav class="subtabs">
+        <button data-s="pane-supplies" class="active">Supplies</button>
+        <button data-s="pane-freezer">Freezer</button>
+      </nav>
+      <div class="pane active" id="pane-supplies">
+        <p class="muted small" style="margin:0 0 14px">Set a par (how many you like on hand). Anything below par lands on your restock list.</p>
+        <div id="pantryContent"></div>
+      </div>
+      <div class="pane" id="pane-freezer">
+        <p class="muted small" style="margin:0 0 14px">Your prepped portions. Tap − as you eat them.</p>
+        <div class="card">
+          <div id="freezerList"></div>
+          <div class="add-row">
+            <input id="fz-name" placeholder="Meal name" />
+            <input id="fz-qty" type="number" min="0" value="1" style="max-width:70px" />
+            <button class="btn btn-sm" id="fz-add">Add</button>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- RECIPES -->
-    <section class="view" id="view-recipes">
-      <div class="view-head"><h2>Recipe Box</h2><div class="spacer"></div><button class="btn btn-gold btn-sm" id="rc-new">+ Add recipe</button></div>
-      <div class="card" style="margin-bottom:12px">
-        <h3>📲 Save from Instagram or the web</h3>
-        <div class="add-row" style="margin-top:0">
-          <input id="rc-link" placeholder="Paste an Instagram or recipe link…" />
-          <button class="btn btn-sm" id="rc-linkadd">Save link</button>
-        </div>
-        <div class="small muted" style="margin-top:6px">Copy the post's link in Instagram (Share → Copy link), paste it here, and it's saved to reference. Ask me to set up the one-tap iPhone share too.</div>
-      </div>
-      <div class="add-row" style="margin-top:0;margin-bottom:12px">
-        <input id="rc-search" placeholder="Search title or tag…" />
-        <select id="rc-filter" style="max-width:160px"><option value="all">All</option><option value="cooked">Cooked</option><option value="untried">Not tried yet</option></select>
-      </div>
-      <div id="recipesContent"></div>
-    </section>
-
-    <!-- MEAL PLAN -->
+    <!-- KITCHEN (Meals | Recipes) -->
     <section class="view" id="view-meal">
-      <div class="view-head"><h2>This Week's Meals</h2><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="mp-suggest">Suggest a plan</button></div>
-      <p class="muted small" style="margin:-6px 0 14px">Plan the week, save it, and build a rotation of go-to dinners over time.</p>
-      <div id="mealContent"></div>
+      <div class="view-head"><h2>Kitchen</h2></div>
+      <nav class="subtabs">
+        <button data-s="pane-meals" class="active">Meals</button>
+        <button data-s="pane-recipes">Recipes</button>
+      </nav>
+      <div class="pane active" id="pane-meals">
+        <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="mp-suggest">Suggest a plan</button></div>
+        <p class="muted small" style="margin:0 0 14px">Plan the week, save it, and build a rotation of go-to dinners over time.</p>
+        <div id="mealContent"></div>
+      </div>
+      <div class="pane" id="pane-recipes">
+        <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-gold btn-sm" id="rc-new">+ Add recipe</button></div>
+        <div class="card" style="margin-bottom:12px">
+          <h3>📲 Save from Instagram or the web</h3>
+          <div class="add-row" style="margin-top:0">
+            <input id="rc-link" placeholder="Paste an Instagram or recipe link…" />
+            <button class="btn btn-sm" id="rc-linkadd">Save link</button>
+          </div>
+          <div class="small muted" style="margin-top:6px">Copy the post's link in Instagram (Share → Copy link), paste it here, and it's saved to reference.</div>
+        </div>
+        <div class="add-row" style="margin-top:0;margin-bottom:12px">
+          <input id="rc-search" placeholder="Search title or tag…" />
+          <select id="rc-filter" style="max-width:160px"><option value="all">All</option><option value="cooked">Cooked</option><option value="untried">Not tried yet</option></select>
+        </div>
+        <div id="recipesContent"></div>
+      </div>
     </section>
   </main>
 </div>
@@ -484,6 +494,18 @@ $("#tabs").addEventListener("click",e=>{
   b.classList.add("active");
   document.querySelectorAll("section.view").forEach(v=>v.classList.remove("active"));
   $("#view-"+b.dataset.v).classList.add("active");
+});
+
+/* segmented sub-tabs inside Tasks / Stock / Kitchen */
+document.querySelectorAll("nav.subtabs").forEach(bar=>{
+  bar.addEventListener("click", e=>{
+    const b=e.target.closest("button[data-s]"); if(!b) return;
+    bar.querySelectorAll("button").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    bar.parentElement.querySelectorAll(":scope > .pane").forEach(p=>{
+      p.classList.toggle("active", p.id===b.dataset.s);
+    });
+  });
 });
 
 /* ---------- RENDER ---------- */
