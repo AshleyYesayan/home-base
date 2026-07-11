@@ -293,13 +293,29 @@ function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");cl
 let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[]};
 
 /* grocery store favorites (per-device preference) */
-const DEFAULT_STORES=["Wegmans","Whole Foods","Costco","Target","Safeway","Publix","Kroger","Trader Joe's","Instacart","Amazon"];
+/* Stores verified to exist on Instacart (checked live). Whole Foods and Trader Joe's
+   are deliberately absent — neither is carried by Instacart. */
+const DEFAULT_STORES=["Wegmans","Costco","Target","Safeway","Publix","Kroger","ALDI","Sprouts","Any store"];
+const IC_SLUGS={"Wegmans":"wegmans","Costco":"costco","Target":"target","Safeway":"safeway","Publix":"publix","Kroger":"kroger","ALDI":"aldi","Sprouts":"sprouts","Any store":""};
+function icSlug(){
+  const s=getStore();
+  if(Object.prototype.hasOwnProperty.call(IC_SLUGS,s)) return IC_SLUGS[s];
+  return s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+}
 function getStores(){ try{ return JSON.parse(localStorage.getItem('hb_stores')||'null')||DEFAULT_STORES.slice(); }catch(e){ return DEFAULT_STORES.slice(); } }
 function getStore(){ return localStorage.getItem('hb_store')||'Wegmans'; }
 function setStore(s){ localStorage.setItem('hb_store', s); }
 function addStore(s){ const st=getStores(); if(!st.includes(s)){ st.push(s); localStorage.setItem('hb_stores', JSON.stringify(st)); } }
 function storeSearchUrl(store, items){ return "https://www.google.com/search?q="+encodeURIComponent(store+" grocery delivery "+items.join(", ")); }
-function instacartUrl(item){ return "https://www.instacart.com/store/wegmans/search/"+encodeURIComponent(item); }
+function instacartUrl(item){
+  const slug=icSlug();
+  const base=slug ? "https://www.instacart.com/store/"+slug+"/s" : "https://www.instacart.com/store/s";
+  return base+"?k="+encodeURIComponent(item);
+}
+function instacartStoreUrl(){
+  const slug=icSlug();
+  return slug ? "https://www.instacart.com/store/"+slug+"/storefront" : "https://www.instacart.com/store";
+}
 // Amazon Associates tracking ID — rides on every Amazon link the app opens.
 const AMZN_TAG = "onevillage09-20";
 function amazonUrl(item){ return "https://www.amazon.com/s?k="+encodeURIComponent(item)+"&tag="+AMZN_TAG; }
@@ -632,7 +648,7 @@ function renderPantry(){
   const addB=el("button","btn btn-sm","Add"); addB.onclick=()=>{ const v=nameI.value.trim(); if(v){ addStore(v); setStore(v); nameI.value=""; render(); } };
   grow.appendChild(sel); grow.appendChild(nameI); grow.appendChild(addB);
   gs.appendChild(grow);
-  gs.appendChild(el("div","small muted","Your restock list opens a search at the selected store. Default is Wegmans — switch or add favorites anytime."));
+  gs.appendChild(el("div","small muted",`Every 🛒 below opens that item's search at ${esc(getStore())}. Switch stores anytime — the links follow. (Whole Foods and Trader Joe's aren't on Instacart.)`));
   wrap.appendChild(gs);
   const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Restock list "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
   if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
@@ -652,7 +668,7 @@ function renderPantry(){
     const linked=low.filter(p=>p.amazon_asin).map(p=>({asin:p.amazon_asin,qty:Math.max(1,p.par-p.count),name:p.name}));
     const unlinked=low.filter(p=>!p.amazon_asin);
     const actions=el("div","add-row"); actions.style.marginTop="12px";
-    const allIc=aBtn("btn btn-gold btn-sm","🛒 Send list to Instacart (Wegmans)","https://www.instacart.com/store/wegmans/storefront",()=>copyList(low.map(p=>`${p.name} x${Math.max(1,p.par-p.count)}`)));
+    const allIc=aBtn("btn btn-gold btn-sm",`🛒 Open ${getStore()} on Instacart`, instacartStoreUrl(), ()=>copyList(low.map(p=>`${p.name} x${Math.max(1,p.par-p.count)}`)));
     let allAz;
     if(linked.length){
       allAz=aBtn("btn btn-sm",`📦 Add ${linked.length} to Amazon cart`, amazonCartUrl(linked), ()=>toast(`Sending ${linked.length} item${linked.length===1?"":"s"} to your Amazon cart.`));
