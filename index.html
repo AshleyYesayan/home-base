@@ -714,6 +714,13 @@ function renderPantry(){
   cats.forEach(cat=>{
     const items=DATA.pantry_items.filter(p=>(p.category||"Other")===cat);
     const c=el("div","card"); c.appendChild(el("h3",null,"📦 "+cat));
+    c.addEventListener("dragover",e=>{ if(!DRAG_ID) return; e.preventDefault(); c.style.outline="2px dashed var(--gold)"; });
+    c.addEventListener("dragleave",()=>{ c.style.outline=""; });
+    c.addEventListener("drop",e=>{
+      e.preventDefault(); c.style.outline="";
+      const p=DATA.pantry_items.find(x=>x.id===DRAG_ID);
+      if(p) moveItem(p, cat);
+    });
     items.forEach(p=>{
       const row=el("div","row");
       const short=Math.max(0,p.par-p.count);
@@ -731,8 +738,14 @@ function renderPantry(){
       q.appendChild(minus); q.appendChild(badge); q.appendChild(plus);
       const qw=el("div","qty-wrap"); qw.appendChild(el("div","qty-cap","Have")); qw.appendChild(q);
       const lk=aBtn("icon-btn",p.amazon_asin?"🔗":"🔎", amazonUrl(p.name)); lk.title="Find it on Amazon, then Share → Copy Link";
+      const mv=el("button","icon-btn","⇄"); mv.title="Move to another list";
+      mv.onclick=()=>{ MOVING = (MOVING===p.id ? null : p.id); render(); };
       const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("pantry_items",p.id);
-      row.appendChild(g); row.appendChild(pw); row.appendChild(qw); row.appendChild(lk); row.appendChild(del); c.appendChild(row);
+      row.draggable=true;
+      row.addEventListener("dragstart",e=>{ DRAG_ID=p.id; row.style.opacity=".45"; e.dataTransfer.effectAllowed="move"; });
+      row.addEventListener("dragend",()=>{ DRAG_ID=null; row.style.opacity=""; });
+      row.appendChild(g); row.appendChild(pw); row.appendChild(qw); row.appendChild(lk); row.appendChild(mv); row.appendChild(del); c.appendChild(row);
+      if(MOVING===p.id) c.appendChild(movePicker(p, cat));
     });
     wrap.appendChild(c);
   });
@@ -760,6 +773,38 @@ async function adjPar(p,d){
   const {error}=await sb.from("pantry_items").update({par:v}).eq("id",p.id);
   if(error){ toast("Couldn't save — "+error.message); return; }
   p.par=v; render();
+}
+
+/* ---- moving a staple between lists -------------------------------------
+   Two ways in: drag the row onto another list (desktop), or tap ⇄ and pick
+   (works everywhere, including phones, where HTML5 drag doesn't). -------- */
+let MOVING = null;      // id of the item whose "move to" picker is open
+let DRAG_ID = null;     // id of the row currently being dragged
+function allCategories(){
+  const defaults=["Kitchen","Household","Bathroom","Cleaning","Paper goods","Pantry","Beverages","Personal care","Pet","Dispensary","Other"];
+  const existing=DATA.pantry_items.map(p=>p.category||"Other");
+  return [...new Set([...existing, ...defaults])].sort();
+}
+async function moveItem(p, target){
+  if(!target || target===(p.category||"Other")){ MOVING=null; render(); return; }
+  const {error}=await sb.from("pantry_items").update({category:target}).eq("id",p.id);
+  if(error){ toast("Couldn't move — "+error.message); return; }
+  MOVING=null; DRAG_ID=null;
+  await refresh("pantry_items"); render();
+  toast(`${p.name} → ${target}`);
+}
+function movePicker(p, currentCat){
+  const box=el("div","card");
+  box.style.cssText="border:2px solid var(--gold);background:#fffdf6;margin:6px 0";
+  box.appendChild(el("div","small muted",`Move “${esc(p.name)}” to:`));
+  const row=el("div","add-row"); row.style.marginTop="8px";
+  allCategories().filter(x=>x!==currentCat).forEach(t=>{
+    const b=el("button","btn btn-sm",t); b.onclick=()=>moveItem(p,t); row.appendChild(b);
+  });
+  const cx=el("button","btn btn-ghost btn-sm","Cancel"); cx.onclick=()=>{ MOVING=null; render(); };
+  row.appendChild(cx);
+  box.appendChild(row);
+  return box;
 }
 
 function renderFreezer(){
