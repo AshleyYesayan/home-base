@@ -348,12 +348,31 @@ function aBtn(cls,label,href,onclick){
 /* Linking works in whatever order you like: copy an Amazon link whenever you see
    one, then tell the app which staple it belongs to. No modes, no round trip. */
 let LINK_ASIN = null;   // an Amazon product we've grabbed, waiting to be assigned
+/* Amazon's "Copy Link" hands you a SHORT link (a.co/d/xxxx) with no product id in it.
+   The old code rejected those outright — which is why linking never worked from a phone.
+   This asks our resolver to follow the redirect and hand back the real product. */
+const RESOLVE_URL = "https://wjuejftzrrfhdurfpukd.supabase.co/functions/v1/resolve-amazon";
+async function asinFromAny(v){
+  const direct = asinFrom(v);
+  if(direct) return direct;
+  const s = String(v||"").trim();
+  const m = s.match(/https?:\/\/\S+/);
+  if(!m) return null;
+  try{
+    const r = await fetch(RESOLVE_URL+"?u="+encodeURIComponent(m[0]));
+    const j = await r.json();
+    return j.asin || null;
+  }catch(e){ return null; }
+}
 async function pasteAmazonLink(){
+  const btn = $("#pasteBtn");
   let txt="";
   try{ txt = await navigator.clipboard.readText(); }catch(e){ txt=""; }
-  if(!txt){ const i=$("#linkManual"); if(i) i.focus(); toast("Couldn't read your clipboard — paste the link in the box below."); return; }
-  const asin = asinFrom(txt);
-  if(!asin){ toast("That's not an Amazon product link. On the product page: Share → Copy Link."); return; }
+  if(!txt){ const i=$("#linkManual"); if(i) i.focus(); toast("Couldn't read your clipboard — paste the link in the box below instead."); return; }
+  if(btn){ btn.disabled=true; btn.textContent="Looking it up…"; }
+  const asin = await asinFromAny(txt);
+  if(btn){ btn.disabled=false; btn.textContent="📋 Paste copied Amazon link"; }
+  if(!asin){ toast("No product on that link. Open the item's own page on Amazon first, then Share → Copy Link."); return; }
   LINK_ASIN = asin; render();
 }
 async function assignAsin(p){
@@ -372,12 +391,17 @@ function linkCard(){
   const c = el("div","card"); c.style.cssText="border:2px solid var(--gold);background:#fffdf6";
   if(!LINK_ASIN){
     c.appendChild(el("h3",null,"🔗 Link an Amazon product"));
-    c.appendChild(el("div","small muted","On Amazon, open the exact product you want → Share → Copy Link. Come back here, tap the button, and pick which staple it is. Do it in any order, whenever."));
+    c.appendChild(el("div","small muted","1. Tap 🔎 next to an item — Amazon opens.  2. Tap the exact product you want, so you're on ITS page (not the search results).  3. Share → Copy Link.  4. Come back here and tap the button below. Short a.co links work fine."));
     const row=el("div","add-row");
-    const b=el("button","btn btn-gold","📋 Paste copied Amazon link"); b.onclick=pasteAmazonLink;
+    const b=el("button","btn btn-gold","📋 Paste copied Amazon link"); b.id="pasteBtn"; b.onclick=pasteAmazonLink;
     row.appendChild(b); c.appendChild(row);
     const i=el("input"); i.id="linkManual"; i.placeholder="…or paste the link here"; i.style.marginTop="10px";
-    i.oninput=()=>{ const a=asinFrom(i.value); if(a){ LINK_ASIN=a; render(); } };
+    i.oninput=async ()=>{
+      const v=i.value.trim();
+      if(v.length<10) return;
+      const a=await asinFromAny(v);
+      if(a){ LINK_ASIN=a; render(); }
+    };
     c.appendChild(i);
   } else {
     c.appendChild(el("h3",null,"🔗 Which staple is this?"));
