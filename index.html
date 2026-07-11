@@ -317,9 +317,7 @@ function amazonCartUrl(list){
    Tap the link button and we send you straight to Amazon search for that
    item. You pick the exact one you want, copy its link, come back, tap
    Paste. No hunting for a URL before you start. ------------------------- */
-let PICKING = null;   // id of the staple we're linking right now
-/* iOS blocks window.open inside the installed app, so every store link is a REAL
-   anchor. The anchor navigates on its own; we only flag which item we're picking. */
+/* iOS blocks window.open inside the installed app, so every store link is a REAL anchor. */
 function aBtn(cls,label,href,onclick){
   const a=document.createElement("a");
   a.className=cls; a.textContent=label;
@@ -329,54 +327,53 @@ function aBtn(cls,label,href,onclick){
   if(onclick) a.addEventListener("click",onclick);
   return a;
 }
-function startPick(p){
-  PICKING = p.id;
-  // re-render after the anchor has handed off to Amazon
-  setTimeout(()=>{ render(); const b=$("#pickPaste"); if(b) b.scrollIntoView({block:"center",behavior:"smooth"}); }, 120);
-}
-function cancelPick(){ PICKING=null; render(); }
-async function unlinkAmazon(p){
-  await sb.from("pantry_items").update({amazon_asin:null}).eq("id",p.id);
-  PICKING=null; await refresh("pantry_items"); render(); toast(`Unlinked ${p.name}.`);
-}
-async function savePick(v){
-  const p = DATA.pantry_items.find(x=>x.id===PICKING);
-  if(!p) return false;
-  const asin = asinFrom(v);
-  if(!asin) return false;
-  await sb.from("pantry_items").update({amazon_asin:asin}).eq("id",p.id);
-  const name = p.name;
-  PICKING = null;
-  await refresh("pantry_items");
-  const next = DATA.pantry_items.filter(belowPar).find(x=>!x.amazon_asin);
-  render();
-  toast(`✓ ${name} linked${next?" — next up: "+next.name:""}`);
-  return true;
-}
-async function pasteForPick(){
+/* Linking works in whatever order you like: copy an Amazon link whenever you see
+   one, then tell the app which staple it belongs to. No modes, no round trip. */
+let LINK_ASIN = null;   // an Amazon product we've grabbed, waiting to be assigned
+async function pasteAmazonLink(){
   let txt="";
   try{ txt = await navigator.clipboard.readText(); }catch(e){ txt=""; }
-  if(txt && await savePick(txt)) return;
-  const i=$("#pickInput");
-  if(i){ i.focus(); }
-  toast(txt ? "That wasn't an Amazon product link — copy it from the product page." : "Paste the link into the box below.");
+  if(!txt){ const i=$("#linkManual"); if(i) i.focus(); toast("Couldn't read your clipboard — paste the link in the box below."); return; }
+  const asin = asinFrom(txt);
+  if(!asin){ toast("That's not an Amazon product link. On the product page: Share → Copy Link."); return; }
+  LINK_ASIN = asin; render();
 }
-function pickCard(){
-  const p = DATA.pantry_items.find(x=>x.id===PICKING);
-  if(!p) return null;
+async function assignAsin(p){
+  const asin = LINK_ASIN;
+  const {error} = await sb.from("pantry_items").update({amazon_asin:asin}).eq("id",p.id);
+  if(error){ toast("Couldn't save — "+error.message); return; }
+  LINK_ASIN = null;
+  await refresh("pantry_items"); render();
+  toast(`✓ ${p.name} linked — it'll go straight to your Amazon cart now.`);
+}
+async function unlinkAmazon(p){
+  await sb.from("pantry_items").update({amazon_asin:null}).eq("id",p.id);
+  await refresh("pantry_items"); render(); toast(`Unlinked ${p.name}.`);
+}
+function linkCard(){
   const c = el("div","card"); c.style.cssText="border:2px solid var(--gold);background:#fffdf6";
-  c.appendChild(el("h3",null,`🔗 Picking “${esc(p.name)}” on Amazon`));
-  c.appendChild(el("div","small muted","Amazon just opened in a new tab. Choose the one you want, copy its link (Share → Copy Link), then come back here and tap Paste."));
-  const row = el("div","add-row");
-  const pasteB = el("button","btn btn-gold","📋 Paste Amazon link"); pasteB.id="pickPaste"; pasteB.onclick=pasteForPick;
-  const openB = aBtn("btn btn-ghost btn-sm","Reopen Amazon", amazonUrl(p.name));
-  row.appendChild(pasteB); row.appendChild(openB);
-  if(p.amazon_asin){ const un=el("button","btn btn-ghost btn-sm","Unlink"); un.onclick=()=>unlinkAmazon(p); row.appendChild(un); }
-  const cx=el("button","btn btn-ghost btn-sm","Cancel"); cx.onclick=cancelPick; row.appendChild(cx);
-  c.appendChild(row);
-  const i = el("input"); i.id="pickInput"; i.placeholder="…or paste the link here"; i.style.marginTop="10px";
-  i.oninput = async ()=>{ if(asinFrom(i.value)) await savePick(i.value); };
-  c.appendChild(i);
+  if(!LINK_ASIN){
+    c.appendChild(el("h3",null,"🔗 Link an Amazon product"));
+    c.appendChild(el("div","small muted","On Amazon, open the exact product you want → Share → Copy Link. Come back here, tap the button, and pick which staple it is. Do it in any order, whenever."));
+    const row=el("div","add-row");
+    const b=el("button","btn btn-gold","📋 Paste copied Amazon link"); b.onclick=pasteAmazonLink;
+    row.appendChild(b); c.appendChild(row);
+    const i=el("input"); i.id="linkManual"; i.placeholder="…or paste the link here"; i.style.marginTop="10px";
+    i.oninput=()=>{ const a=asinFrom(i.value); if(a){ LINK_ASIN=a; render(); } };
+    c.appendChild(i);
+  } else {
+    c.appendChild(el("h3",null,"🔗 Which staple is this?"));
+    c.appendChild(el("div","small muted",`Got the Amazon product (${esc(LINK_ASIN)}). Tap the item it belongs to.`));
+    const row=el("div","add-row");
+    DATA.pantry_items.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{
+      const b=el("button", p.amazon_asin?"btn btn-ghost btn-sm":"btn btn-sm", p.name+(p.amazon_asin?" ✓":""));
+      b.onclick=()=>assignAsin(p); row.appendChild(b);
+    });
+    c.appendChild(row);
+    const cx=el("button","btn btn-ghost btn-sm","Cancel"); cx.style.marginTop="10px";
+    cx.onclick=()=>{ LINK_ASIN=null; render(); };
+    c.appendChild(cx);
+  }
   return c;
 }
 function copyList(items){ try{ navigator.clipboard.writeText(items.join(", ")); toast("Restock list copied — paste it in the store search."); }catch(e){ toast("Couldn't copy list."); } }
@@ -621,7 +618,7 @@ $("#rm-add").onclick=async()=>{ const name=$("#rm-name").value.trim(); if(!name)
 
 function renderPantry(){
   const wrap=$("#pantryContent"); wrap.innerHTML="";
-  if(PICKING){ const pc=pickCard(); if(pc) wrap.appendChild(pc); else PICKING=null; }
+  wrap.appendChild(linkCard());
   const cats=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))].sort();
   const low=DATA.pantry_items.filter(belowPar);
   // grocery store selector
@@ -645,7 +642,7 @@ function renderPantry(){
     const links=el("div"); links.style.cssText="display:flex;gap:6px;flex:none";
     const ic=aBtn("btn btn-sm btn-ghost","🛒",instacartUrl(p.name)); ic.title="Add on Instacart (Wegmans)";
     const az=aBtn("btn btn-sm btn-ghost","📦", p.amazon_asin?amazonCartUrl([{asin:p.amazon_asin,qty:need}]):amazonUrl(p.name)); az.title=p.amazon_asin?"Add this to Amazon cart":"Search on Amazon";
-    const lk=aBtn("btn btn-sm btn-ghost",p.amazon_asin?"🔗":"🔎", amazonUrl(p.name), ()=>startPick(p)); lk.title=p.amazon_asin?"Pick a different one on Amazon":"Pick it on Amazon";
+    const lk=aBtn("btn btn-sm btn-ghost",p.amazon_asin?"🔗":"🔎", amazonUrl(p.name)); lk.title="Find it on Amazon, then Share → Copy Link";
     links.appendChild(ic); links.appendChild(az); links.appendChild(lk);
     row.appendChild(g); row.appendChild(links); rc.appendChild(row);
   });
@@ -667,7 +664,7 @@ function renderPantry(){
     if(unlinked.length){
       const hint=el("div","small muted",`${unlinked.length} item${unlinked.length===1?" isn't":"s aren't"} linked yet. Tap 🔎 to pick it on Amazon — you only do this once per item.`);
       rc.appendChild(hint);
-      const pickAll=aBtn("btn btn-ghost btn-sm",`🔎 Pick ${unlinked[0].name} on Amazon`, amazonUrl(unlinked[0].name), ()=>startPick(unlinked[0])); pickAll.style.marginTop="8px";
+      const pickAll=aBtn("btn btn-ghost btn-sm",`🔎 Find ${unlinked[0].name} on Amazon`, amazonUrl(unlinked[0].name)); pickAll.style.marginTop="8px";
       rc.appendChild(pickAll);
     }
   }
@@ -691,7 +688,7 @@ function renderPantry(){
       const plus=el("button",null,"+"); plus.onclick=()=>adjPantry(p,1);
       q.appendChild(minus); q.appendChild(badge); q.appendChild(plus);
       const qw=el("div","qty-wrap"); qw.appendChild(el("div","qty-cap","Have")); qw.appendChild(q);
-      const lk=aBtn("icon-btn",p.amazon_asin?"🔗":"🔎", amazonUrl(p.name), ()=>startPick(p)); lk.title=p.amazon_asin?"Pick a different one on Amazon":"Pick it on Amazon";
+      const lk=aBtn("icon-btn",p.amazon_asin?"🔗":"🔎", amazonUrl(p.name)); lk.title="Find it on Amazon, then Share → Copy Link";
       const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("pantry_items",p.id);
       row.appendChild(g); row.appendChild(pw); row.appendChild(qw); row.appendChild(lk); row.appendChild(del); c.appendChild(row);
     });
