@@ -285,6 +285,29 @@ function addStore(s){ const st=getStores(); if(!st.includes(s)){ st.push(s); loc
 function storeSearchUrl(store, items){ return "https://www.google.com/search?q="+encodeURIComponent(store+" grocery delivery "+items.join(", ")); }
 function instacartUrl(item){ return "https://www.instacart.com/store/wegmans/search/"+encodeURIComponent(item); }
 function amazonUrl(item){ return "https://www.amazon.com/s?k="+encodeURIComponent(item); }
+// Pull the 10-char ASIN out of any Amazon product link (or accept a bare ASIN).
+function asinFrom(v){
+  const s=String(v||"").trim();
+  const m=s.match(/(?:\/dp\/|\/gp\/product\/|\/ASIN\/|[?&]asin=)([A-Z0-9]{10})/i);
+  if(m) return m[1].toUpperCase();
+  return /^[A-Z0-9]{10}$/i.test(s) ? s.toUpperCase() : null;
+}
+// One URL that drops every linked item straight into the Amazon cart.
+function amazonCartUrl(list){
+  const qs=list.map((x,i)=>`ASIN.${i+1}=${encodeURIComponent(x.asin)}&Quantity.${i+1}=${x.qty}`).join("&");
+  return "https://www.amazon.com/gp/aws/cart/add.html?"+qs;
+}
+// Ask for an Amazon link and save its ASIN against the staple.
+async function linkAmazon(p){
+  const cur=p.amazon_asin?`Current: ${p.amazon_asin}\n\n`:"";
+  const v=prompt(`${cur}Paste the Amazon product link for "${p.name}" (or its ASIN). Leave blank to unlink.`, "");
+  if(v===null) return;
+  if(v.trim()===""){ await sb.from("pantry_items").update({amazon_asin:null}).eq("id",p.id); await refresh("pantry_items"); render(); toast("Unlinked from Amazon."); return; }
+  const asin=asinFrom(v);
+  if(!asin){ toast("Couldn't find an ASIN in that — paste the full product link."); return; }
+  await sb.from("pantry_items").update({amazon_asin:asin}).eq("id",p.id);
+  await refresh("pantry_items"); render(); toast(`Linked ${p.name} → ${asin}`);
+}
 function copyList(items){ try{ navigator.clipboard.writeText(items.join(", ")); toast("Restock list copied — paste it in the store search."); }catch(e){ toast("Couldn't copy list."); } }
 
 /* ---------- AUTH ---------- */
@@ -529,19 +552,32 @@ function renderPantry(){
   if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
   low.forEach(p=>{
     const row=el("div","row");
-    const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)}</div><div class="sub">Buy ${p.par-p.count} · ${p.count}/${p.par}</div>`;
+    const need=p.par-p.count;
+    const tag=p.amazon_asin?'<span class="pill">📦 linked</span>':'';
+    const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${tag}</div><div class="sub">Buy ${need} · ${p.count}/${p.par}</div>`;
     const links=el("div"); links.style.cssText="display:flex;gap:6px;flex:none";
     const ic=el("button","btn btn-sm btn-ghost","🛒"); ic.title="Add on Instacart (Wegmans)"; ic.onclick=()=>window.open(instacartUrl(p.name),"_blank","noopener");
-    const az=el("button","btn btn-sm btn-ghost","📦"); az.title="Add on Amazon"; az.onclick=()=>window.open(amazonUrl(p.name),"_blank","noopener");
-    links.appendChild(ic); links.appendChild(az);
+    const az=el("button","btn btn-sm btn-ghost","📦"); az.title=p.amazon_asin?"Add this to Amazon cart":"Search on Amazon";
+    az.onclick=()=>window.open(p.amazon_asin?amazonCartUrl([{asin:p.amazon_asin,qty:need}]):amazonUrl(p.name),"_blank","noopener");
+    const lk=el("button","btn btn-sm btn-ghost","🔗"); lk.title=p.amazon_asin?"Change the Amazon product link":"Link an Amazon product"; lk.onclick=()=>linkAmazon(p);
+    links.appendChild(ic); links.appendChild(az); links.appendChild(lk);
     row.appendChild(g); row.appendChild(links); rc.appendChild(row);
   });
   if(low.length){
+    const linked=low.filter(p=>p.amazon_asin).map(p=>({asin:p.amazon_asin,qty:Math.max(1,p.par-p.count),name:p.name}));
+    const unlinked=low.filter(p=>!p.amazon_asin);
     const actions=el("div","add-row"); actions.style.marginTop="12px";
     const allIc=el("button","btn btn-gold btn-sm","🛒 Send list to Instacart (Wegmans)"); allIc.onclick=()=>{ copyList(low.map(p=>p.name)); window.open("https://www.instacart.com/store/wegmans/storefront","_blank","noopener"); };
-    const allAz=el("button","btn btn-sm","📦 Send list to Amazon"); allAz.onclick=()=>{ copyList(low.map(p=>p.name)); window.open("https://www.amazon.com/","_blank","noopener"); };
+    const allAz=el("button","btn btn-sm",linked.length?`📦 Add ${linked.length} to Amazon cart`:"📦 Add to Amazon cart");
+    allAz.disabled=linked.length===0;
+    allAz.onclick=()=>{ window.open(amazonCartUrl(linked),"_blank","noopener"); toast(`Sending ${linked.length} item${linked.length===1?"":"s"} to your Amazon cart.`); };
     actions.appendChild(allIc); actions.appendChild(allAz); rc.appendChild(actions);
-    rc.appendChild(el("div","small muted","The 🛒 / 📦 on each item open it ready to add. The two buttons open the store and copy your whole list to paste into search."));
+    if(linked.length){
+      rc.appendChild(el("div","small muted",`One tap drops all ${linked.length} linked item${linked.length===1?"":"s"} into your Amazon cart at the right quantities — you just check out.`));
+    }
+    if(unlinked.length){
+      rc.appendChild(el("div","small muted",`${unlinked.length} item${unlinked.length===1?" isn't":"s aren't"} linked to Amazon yet. Tap 🔗 on ${unlinked.length===1?"it":"them"} once and paste the product link — it sticks from then on.`));
+    }
   }
   wrap.appendChild(rc);
   cats.forEach(cat=>{
@@ -549,14 +585,15 @@ function renderPantry(){
     const c=el("div","card"); c.appendChild(el("h3",null,"📦 "+cat));
     items.forEach(p=>{
       const row=el("div","row");
-      const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${belowPar(p)?'<span class="pill bad">low</span>':''}</div><div class="sub">par ${p.par}</div>`;
+      const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${belowPar(p)?'<span class="pill bad">low</span>':''}</div><div class="sub">par ${p.par}${p.amazon_asin?" · 📦 "+esc(p.amazon_asin):""}</div>`;
       const q=el("div","qty");
       const minus=el("button",null,"−"); minus.onclick=()=>adjPantry(p,-1);
       const badge=el("span","count-badge",p.count);
       const plus=el("button",null,"+"); plus.onclick=()=>adjPantry(p,1);
       q.appendChild(minus); q.appendChild(badge); q.appendChild(plus);
+      const lk=el("button","icon-btn","🔗"); lk.title=p.amazon_asin?"Change the Amazon product link":"Link an Amazon product"; lk.onclick=()=>linkAmazon(p);
       const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("pantry_items",p.id);
-      row.appendChild(g); row.appendChild(q); row.appendChild(del); c.appendChild(row);
+      row.appendChild(g); row.appendChild(q); row.appendChild(lk); row.appendChild(del); c.appendChild(row);
     });
     wrap.appendChild(c);
   });
@@ -567,9 +604,11 @@ function renderPantry(){
   catList.push("Other");
   const catOpts=catList.map(x=>`<option value="${escAttr(x)}">${esc(x)}</option>`).join("");
   const add=el("div","add-row");
-  add.innerHTML=`<input id="pt-name" placeholder="Item name"/><select id="pt-cat" style="max-width:150px">${catOpts}</select><input id="pt-par" type="number" min="1" value="2" title="par level" style="max-width:64px"/><input id="pt-cnt" type="number" min="0" value="0" title="have now" style="max-width:64px"/>`;
-  const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ const n=$("#pt-name").value.trim(); if(!n)return; await sb.from("pantry_items").insert({name:n,category:$("#pt-cat").value||"Other",par:+$("#pt-par").value||1,count:+$("#pt-cnt").value||0}); await refresh("pantry_items"); render(); };
-  add.appendChild(b); c.appendChild(add); wrap.appendChild(c);
+  add.innerHTML=`<input id="pt-name" placeholder="Item name"/><select id="pt-cat" style="max-width:150px">${catOpts}</select><input id="pt-par" type="number" min="1" value="2" title="par level" style="max-width:64px"/><input id="pt-cnt" type="number" min="0" value="0" title="have now" style="max-width:64px"/><input id="pt-az" placeholder="Amazon link (optional)" title="Paste the Amazon product link so this item can go straight to your cart"/>`;
+  const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ const n=$("#pt-name").value.trim(); if(!n)return; const asin=asinFrom($("#pt-az").value); await sb.from("pantry_items").insert({name:n,category:$("#pt-cat").value||"Other",par:+$("#pt-par").value||1,count:+$("#pt-cnt").value||0,amazon_asin:asin}); $("#pt-az").value=""; await refresh("pantry_items"); render(); };
+  add.appendChild(b); c.appendChild(add);
+  c.appendChild(el("div","small muted","Paste an Amazon product link and that staple can be sent straight to your cart from the restock list. You can also add it later with 🔗."));
+  wrap.appendChild(c);
 }
 async function adjPantry(p,d){ const v=Math.max(0,p.count+d); await sb.from("pantry_items").update({count:v}).eq("id",p.id); p.count=v; render(); }
 
