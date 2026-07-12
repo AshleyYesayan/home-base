@@ -1,5 +1,5 @@
 // Home Base service worker — always fetch fresh app code; cache only as an offline fallback.
-const CACHE = "homebase-v3";
+const CACHE = "homebase-v4";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -27,5 +27,34 @@ self.addEventListener("fetch", (e) => {
         return res;
       })
       .catch(() => caches.match(req).then((m) => m || caches.match("./index.html")))
+  );
+});
+
+/* ---------- Web Push ---------- */
+self.addEventListener("push", function(event){
+  var d = {};
+  try { d = event.data ? event.data.json() : {}; }
+  catch (e) { d = { title: "Home Base", body: event.data ? event.data.text() : "" }; }
+  event.waitUntil(
+    self.registration.showNotification(d.title || "Home Base", {
+      body: d.body || "",
+      icon: "icon-192.png",
+      badge: "icon-192.png",
+      tag: d.tag || "homebase",
+      data: { url: d.url || "./" }
+    })
+  );
+});
+
+self.addEventListener("notificationclick", function(event){
+  event.notification.close();
+  var url = (event.notification.data && event.notification.data.url) || "./";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function(list){
+      for (var i = 0; i < list.length; i++){
+        if (list[i].url.indexOf("home-base") > -1 && "focus" in list[i]) return list[i].focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    })
   );
 });
