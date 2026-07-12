@@ -88,7 +88,16 @@
   .row .title{overflow-wrap:anywhere}
   .row .title{font-weight:700;font-size:15px}
   .row .sub{color:var(--muted);font-size:13px;margin-top:2px}
-  .check{width:30px;height:30px;border-radius:8px;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;flex:none;background:#fff;font-size:16px}
+  /* --- assignee chips --- */
+    .who-wrap{position:relative;display:inline-flex;flex:0 0 auto;margin-left:6px}
+    .who{width:32px;height:32px;min-width:32px;border-radius:999px;border:1px dashed var(--line);background:var(--card);color:var(--muted);font-weight:800;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+    .who:hover{border-color:var(--teal);color:var(--teal)}
+    .who.set{border:1px solid var(--gold);background:var(--gold);color:var(--ink)}
+    .who-pop{position:absolute;right:0;top:38px;z-index:40;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px;display:flex;flex-direction:column;gap:2px;min-width:150px;box-shadow:0 12px 30px rgba(0,0,0,.16)}
+    .who-opt{min-height:40px;padding:0 12px;text-align:left;background:transparent;border:0;color:var(--ink);border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap}
+    .who-opt:hover{background:var(--bg)}
+    .who-opt.on{background:var(--gold);color:var(--ink);font-weight:800}
+    .check{width:30px;height:30px;border-radius:8px;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;flex:none;background:#fff;font-size:16px}
   .check.done{background:var(--good);border-color:var(--good);color:#fff}
   .done-text{text-decoration:line-through;color:var(--muted)}
   .qty{display:flex;align-items:center;gap:8px}
@@ -323,6 +332,8 @@ function toastUndo(msg, undo){
 }
 
 /* cache */
+let MEMBERS = [];
+let ASSIGN = null;
 let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[]};
 
 /* grocery store favorites (per-device preference) */
@@ -513,6 +524,7 @@ async function enterApp(session){
 /* ---------- DATA ---------- */
 async function loadAll(){
   const tables = Object.keys(DATA);
+  try{ const mp = await sb.from("profiles").select("*"); MEMBERS = mp.data || []; }catch(e){ MEMBERS = []; }
   await Promise.all(tables.map(async t=>{
     const {data,error} = await sb.from(t).select("*");
     if(!error) DATA[t]=data||[];
@@ -733,13 +745,59 @@ function renderToday(){
   });
 }
 
+
+/* ---------- task delegation ---------- */
+function memberName(id){
+  const p = MEMBERS.find(x=>x.id===id);
+  if(!p) return "";
+  let n = (p.display_name || (p.email||"").split("@")[0] || "").trim();
+  if(n.indexOf(".")>-1) n = n.split(".")[0];
+  return n ? n.charAt(0).toUpperCase()+n.slice(1) : "?";
+}
+function whoChip(table, t){
+  const wrap = el("span","who-wrap","");
+  const name = t.assignee ? memberName(t.assignee) : "";
+  const b = el("button","who"+(t.assignee?" set":""), t.assignee ? (name.charAt(0)||"?") : "+");
+  b.setAttribute("aria-label", t.assignee ? ("Assigned to "+name) : "Assign this task");
+  b.title = t.assignee ? ("Assigned to "+name) : "Assign";
+  b.onclick = (e)=>{ e.stopPropagation();
+    const open = ASSIGN && ASSIGN.table===table && ASSIGN.id===t.id;
+    ASSIGN = open ? null : {table:table, id:t.id};
+    render();
+  };
+  wrap.appendChild(b);
+  if(ASSIGN && ASSIGN.table===table && ASSIGN.id===t.id){
+    const pop = el("div","who-pop","");
+    MEMBERS.forEach(m=>{
+      const o = el("button","who-opt"+(t.assignee===m.id?" on":""), memberName(m.id));
+      o.onclick = (e)=>{ e.stopPropagation(); setAssignee(table,t,m.id); };
+      pop.appendChild(o);
+    });
+    const any = el("button","who-opt"+(!t.assignee?" on":""), "Anyone");
+    any.onclick = (e)=>{ e.stopPropagation(); setAssignee(table,t,null); };
+    pop.appendChild(any);
+    wrap.appendChild(pop);
+  }
+  return wrap;
+}
+async function setAssignee(table, t, uid){
+  ASSIGN = null;
+  const prev = t.assignee;
+  t.assignee = uid;
+  render();
+  const {error} = await sb.from(table).update({assignee: uid}).eq("id", t.id);
+  if(error){ t.assignee = prev; render(); toast("Couldn't assign — "+error.message); return; }
+  await refresh(table); render();
+  toast(uid ? ("Assigned to "+memberName(uid)) : "Unassigned");
+}
+
 function taskRow(t){
   const done = t.done_date===todayStr();
   const row=el("div","row");
   const chk=el("div","check"+(done?" done":""),done?"✓":"");
   chk.onclick=()=>toggleTask(t);
   const g=el("div","grow"); g.innerHTML=`<div class="title ${done?"done-text":""}">${esc(t.task)}</div>`;
-  row.appendChild(chk); row.appendChild(g);
+  row.appendChild(chk); row.appendChild(g); row.appendChild(whoChip("recurring_tasks",t));
   return row;
 }
 
@@ -1215,7 +1273,7 @@ function renderWeekly(){
     const row=el("div","row");
     const chk=el("div","check"); chk.onclick=()=>toggleWeekly(t,true);
     const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>`;
-    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("weekly_tasks",t.id);
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("weekly_tasks",t.id); row.appendChild(whoChip("weekly_tasks",t));
     row.appendChild(chk); row.appendChild(g); row.appendChild(del); c.appendChild(row);
   });
   const add=el("div","add-row");
@@ -1230,7 +1288,7 @@ function renderWeekly(){
     dwrap.innerHTML="";
     const dc=el("div","card"); dc.appendChild(el("h3",null,`✅ Done this week <span class="pill good">${done.length}</span>`));
     if(done.length===0) dc.appendChild(el("div","empty","Nothing checked off yet this week."));
-    done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.title="Undo"; chk.onclick=()=>toggleWeekly(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("weekly_tasks",t.id); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
+    done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.title="Undo"; chk.onclick=()=>toggleWeekly(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("weekly_tasks",t.id); row.appendChild(whoChip("weekly_tasks",t)); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
     dwrap.appendChild(dc);
   }
 }
@@ -1247,7 +1305,7 @@ function renderHandyman(){
     const row=el("div","row");
     const chk=el("div","check"); chk.onclick=()=>toggleHandyman(t,true);
     const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>${t.notes?`<div class="sub">${esc(t.notes)}</div>`:""}`;
-    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id);
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id); row.appendChild(whoChip("handyman_tasks",t));
     row.appendChild(chk); row.appendChild(g); row.appendChild(del); c.appendChild(row);
   });
   const add=el("div","add-row");
@@ -1258,7 +1316,7 @@ function renderHandyman(){
   wrap.appendChild(c);
   if(done.length){
     const dc=el("div","card"); dc.appendChild(el("h3",null,"✅ Done"));
-    done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.onclick=()=>toggleHandyman(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
+    done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.onclick=()=>toggleHandyman(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id); row.appendChild(whoChip("handyman_tasks",t)); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
     wrap.appendChild(dc);
   }
 }
