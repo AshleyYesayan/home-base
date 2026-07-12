@@ -551,37 +551,46 @@ async function loadAll(){
 async function refresh(t){ const {data}=await sb.from(t).select("*"); DATA[t]=data||[]; }
 
 async function seed(){
-  const tasks=[];
-  ({Sunday:["Grocery run + restock staples","Meal prep portions for the week","Backstock check"],
-    Tuesday:["House manager day — coordinate tasks","Take trash & recycling out","Wipe down kitchen counters"],
-    Friday:["Full house clean","Mow the yard","Water all the plants","Change the bed sheets","Change the bath towels"]}
-  );
-  const seedTasks={Sunday:["Barley in pond","Water front and side porch","Water orchids","Put laundry out for vendor pickup","Put dry cleaning out for vendor pickup","Refill birdseed","Wegovy shot","Refill coffee","Text Carolina the dog-walking schedule","Refill dog treats","Water indoor plants","Check mailbox","Windex sliding glass door"],
-    Tuesday:["House manager day — coordinate tasks","Take trash & recycling out","Wipe down kitchen counters"],
-    Friday:["Full house clean","Mow the yard","Water all the plants","Change the bed sheets","Change the bath towels"]};
-  Object.entries(seedTasks).forEach(([day,arr])=>arr.forEach((task,i)=>tasks.push({day,task,position:i})));
-  await sb.from("recurring_tasks").insert(tasks);
-  await sb.from("reminders").insert([
-    {name:"Change air filters",interval_n:2,interval_unit:"months",last_done:todayStr()},
-    {name:"Koi pond maintenance",interval_n:2,interval_unit:"months",last_done:todayStr()},
-    {name:"Smoke detector batteries",interval_n:6,interval_unit:"months",last_done:todayStr()}
-  ]);
-  await sb.from("pantry_items").insert([
-    {name:"Paper towels",category:"Household",par:3,count:1},
-    {name:"Toilet paper",category:"Household",par:4,count:2},
-    {name:"Tin foil",category:"Kitchen",par:2,count:1},
-    {name:"Dish soap",category:"Kitchen",par:2,count:2},
-    {name:"Coffee beans",category:"Kitchen",par:2,count:1}
-  ]);
-  await sb.from("freezer_meals").insert([
-    {name:"Chicken & rice bowls",qty:4,prepped_date:todayStr(),low_threshold:2},
-    {name:"Turkey chili portions",qty:3,prepped_date:todayStr(),low_threshold:2},
-    {name:"Veggie stir-fry",qty:2,prepped_date:todayStr(),low_threshold:2}
-  ]);
-  await sb.from("recipes").insert([
-    {title:"Sheet-pan salmon & greens",url:"",ingredients:"Salmon\nBroccoli\nOlive oil\nLemon",steps:"Roast at 425 for 15 min.",tags:["dinner","quick"],cooked:true,rating:4,notes:"Weeknight staple."}
-  ]);
-  for(const t of Object.keys(DATA)) await refresh(t);
+  /* Starter content for a brand-new household.
+     Deliberately generic — never seed anyone else's personal routine here. */
+  const seedTasks = [
+    { day:"Sunday",    task:"Plan meals for the week",   position:0 },
+    { day:"Sunday",    task:"Do the grocery run",        position:1 },
+    { day:"Sunday",    task:"Reset the kitchen",         position:2 },
+    { day:"Wednesday", task:"Take the bins out",         position:0 },
+    { day:"Wednesday", task:"Quick tidy of common areas",position:1 },
+    { day:"Friday",    task:"Laundry",                   position:0 },
+    { day:"Friday",    task:"Clean the bathrooms",       position:1 },
+    { day:"Friday",    task:"Vacuum and mop",            position:2 }
+  ];
+  const seedReminders = [
+    { name:"Replace HVAC filter",   interval_n:3, interval_unit:"month", last_done:null, notes:"" },
+    { name:"Test smoke alarms",     interval_n:6, interval_unit:"month", last_done:null, notes:"" },
+    { name:"Deep clean the fridge", interval_n:1, interval_unit:"month", last_done:null, notes:"" }
+  ];
+  const seedPantry = [
+    { name:"Paper towels",   category:"Household", par:4, count:4 },
+    { name:"Toilet paper",   category:"Household", par:8, count:8 },
+    { name:"Dish soap",      category:"Household", par:2, count:2 },
+    { name:"Laundry detergent", category:"Household", par:2, count:2 },
+    { name:"Olive oil",      category:"Kitchen",   par:2, count:2 },
+    { name:"Coffee",         category:"Kitchen",   par:2, count:2 },
+    { name:"Pasta",          category:"Kitchen",   par:4, count:4 }
+  ];
+  const seedFreezer = [
+    { name:"Soup",           qty:0, low_threshold:1, notes:"" },
+    { name:"Cooked protein", qty:0, low_threshold:1, notes:"" }
+  ];
+
+  try{
+    await sb.from("recurring_tasks").insert(seedTasks);
+    await sb.from("reminders").insert(seedReminders);
+    await sb.from("pantry_items").insert(seedPantry);
+    await sb.from("freezer_meals").insert(seedFreezer);
+    await Promise.all(["recurring_tasks","reminders","pantry_items","freezer_meals"].map(refresh));
+  }catch(err){
+    /* a failed seed should never block sign-in */
+  }
 }
 
 /* ---------- helpers ---------- */
@@ -970,7 +979,7 @@ function renderPantry(){
     wrap.appendChild(c);
   });
   const c=el("div","card"); c.appendChild(el("h3",null,"➕ Add staple"));
-  const defaults=["Kitchen","Household","Bathroom","Cleaning","Paper goods","Pantry","Beverages","Personal care","Pet","Dispensary","Other"];
+  const defaults=["Kitchen","Household","Bathroom","Cleaning","Paper goods","Pantry","Beverages","Personal care","Pet","Other"];
   const existing=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))];
   const catList=[...new Set([...existing, ...defaults])].filter(x=>x!=="Other").sort();
   catList.push("Other");
@@ -1015,7 +1024,7 @@ let LINK_OPEN = false; // the Amazon-link panel is collapsed until you want it
 let MOVING = null;      // id of the item whose "move to" picker is open
 let DRAG_ID = null;     // id of the row currently being dragged
 function allCategories(){
-  const defaults=["Kitchen","Household","Bathroom","Cleaning","Paper goods","Pantry","Beverages","Personal care","Pet","Dispensary","Other"];
+  const defaults=["Kitchen","Household","Bathroom","Cleaning","Paper goods","Pantry","Beverages","Personal care","Pet","Other"];
   const existing=DATA.pantry_items.map(p=>p.category||"Other");
   return [...new Set([...existing, ...defaults])].sort();
 }
