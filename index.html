@@ -98,6 +98,9 @@
     .who-opt:hover{background:var(--bg)}
     .who-opt.on{background:var(--gold);color:var(--ink);font-weight:800}
     .row > .who-wrap{order:1}
+    .filter-bar{display:flex;gap:6px;margin:0 0 12px}
+    .chip-toggle{min-height:36px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+    .chip-toggle.on{background:var(--teal);border-color:var(--teal);color:#fff}
     .row > .icon-btn{order:2}
     .check{width:30px;height:30px;border-radius:8px;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;flex:none;background:#fff;font-size:16px}
   .check.done{background:var(--good);border-color:var(--good);color:#fff}
@@ -335,6 +338,8 @@ function toastUndo(msg, undo){
 
 /* cache */
 let MEMBERS = [];
+let MY_ID = null;
+let TASKFILTER = (localStorage.getItem("hb_taskfilter")||"all");
 let ASSIGN = null;
 let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[]};
 
@@ -354,13 +359,13 @@ function setStore(s){ localStorage.setItem('hb_store', s); }
 function addStore(s){ const st=getStores(); if(!st.includes(s)){ st.push(s); localStorage.setItem('hb_stores', JSON.stringify(st)); } }
 function storeSearchUrl(store, items){ return "https://www.google.com/search?q="+encodeURIComponent(store+" grocery delivery "+items.join(", ")); }
 function instacartUrl(item){
-  const slug=icSlug();
-  const base=slug ? "https://www.instacart.com/store/"+slug+"/s" : "https://www.instacart.com/store/s";
-  return base+"?k="+encodeURIComponent(item);
+  /* Retailer-scoped URLs (/store/<slug>/s) hard-block behind an Instacart login.
+     The retailer-agnostic search works logged out and lists every nearby store
+     with Add buttons, so use that. */
+  return "https://www.instacart.com/store/s?k=" + encodeURIComponent(item);
 }
 function instacartStoreUrl(){
-  const slug=icSlug();
-  return slug ? "https://www.instacart.com/store/"+slug+"/storefront" : "https://www.instacart.com/store";
+  return "https://www.instacart.com/store";
 }
 // Amazon Associates tracking ID — rides on every Amazon link the app opens.
 const AMZN_TAG = "onevillage09-20";
@@ -527,6 +532,7 @@ async function enterApp(session){
 async function loadAll(){
   const tables = Object.keys(DATA);
   try{ const mp = await sb.from("profiles").select("*"); MEMBERS = mp.data || []; }catch(e){ MEMBERS = []; }
+  try{ const uu = await sb.auth.getUser(); MY_ID = (uu.data && uu.data.user) ? uu.data.user.id : null; }catch(e){ MY_ID = null; }
   await Promise.all(tables.map(async t=>{
     const {data,error} = await sb.from(t).select("*");
     if(!error) DATA[t]=data||[];
@@ -758,6 +764,7 @@ function memberName(id){
 }
 function whoChip(table, t){
   const wrap = el("span","who-wrap","");
+  wrap.dataset.assignee = t.assignee || "";
   const name = t.assignee ? memberName(t.assignee) : "";
   const b = el("button","who"+(t.assignee?" set":""), t.assignee ? (name.charAt(0)||"?") : "+");
   b.setAttribute("aria-label", t.assignee ? ("Assigned to "+name) : "Assign this task");
@@ -1375,6 +1382,41 @@ async function delRow(table,id){
     toast(`${label} restored`);
   });
 }
+
+
+/* ---------- Mine / Everyone filter ---------- */
+function taskFilterBar(){
+  const host = document.querySelector("#tasksContent");
+  if(!host || !host.parentNode) return;
+  let bar = document.getElementById("taskFilterBar");
+  if(!bar){
+    bar = document.createElement("div");
+    bar.id = "taskFilterBar";
+    bar.className = "filter-bar";
+    host.parentNode.insertBefore(bar, host);
+  }
+  bar.innerHTML = "";
+  [["all","Everyone"],["mine","Mine"]].forEach(function(p){
+    const b = el("button","chip-toggle"+(TASKFILTER===p[0]?" on":""), p[1]);
+    b.onclick = function(){ TASKFILTER = p[0]; localStorage.setItem("hb_taskfilter", p[0]); render(); };
+    bar.appendChild(b);
+  });
+}
+function applyTaskFilter(){
+  taskFilterBar();
+  const mine = (TASKFILTER === "mine");
+  document.querySelectorAll(".row").forEach(function(row){
+    const w = row.querySelector(".who-wrap");
+    if(!w) return;
+    row.style.display = (mine && w.dataset.assignee !== (MY_ID || "")) ? "none" : "";
+  });
+}
+const __render0 = render;
+render = function(){
+  const out = __render0.apply(this, arguments);
+  try{ applyTaskFilter(); }catch(e){}
+  return out;
+};
 
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function escAttr(s){return esc(s).replace(/'/g,"&#39;");}
