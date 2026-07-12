@@ -882,7 +882,7 @@ function renderPantry(){
   const low=DATA.pantry_items.filter(belowPar);
   // grocery store selector
   const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Restock list "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
-  if(low.length) rc.appendChild(el("div","legend","🛒 open at "+esc(getStore())+"  ·  📦 Amazon  ·  🔎 find & link it"));
+  if(low.length) rc.appendChild(el("div","legend","🛒 open at Instacart  ·  📦 Amazon  ·  🔎 find & link it"));
   if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
   low.forEach(p=>{
     const row=el("div","row");
