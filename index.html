@@ -97,6 +97,10 @@
     .who-opt{min-height:40px;padding:0 12px;text-align:left;background:transparent;border:0;color:var(--ink);border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap}
     .who-opt:hover{background:var(--bg)}
     .who-opt.on{background:var(--gold);color:var(--ink);font-weight:800}
+    .who-hint{font-size:11px;color:var(--muted);padding:4px 10px 6px;max-width:190px;line-height:1.35}
+    .who-done{min-height:36px;margin-top:4px;border:0;border-top:1px solid var(--line);background:transparent;color:var(--teal);font-weight:800;font-size:13px;cursor:pointer;border-radius:0 0 8px 8px}
+    .who.set{letter-spacing:-.5px}
+    .is-today{color:var(--gold) !important;font-weight:800}
     .row > .who-wrap{order:1}
     .scan-bar{margin:0 0 12px}
     .scan-btn{width:100%;min-height:48px;font-size:15px;font-weight:800}
@@ -553,6 +557,7 @@ async function loadAll(){
   try{ const mp = await sb.from("profiles").select("*"); MEMBERS = mp.data || []; }catch(e){ MEMBERS = []; }
   try{ const uu = await sb.auth.getUser(); MY_ID = (uu.data && uu.data.user) ? uu.data.user.id : null; }catch(e){ MY_ID = null; }
   try{ paintPushBtn(); }catch(e){}
+  try{ startRealtime(); }catch(e){}
   await Promise.all(tables.map(async t=>{
     const {data,error} = await sb.from(t).select("*");
     if(!error) DATA[t]=data||[];
@@ -791,44 +796,78 @@ function memberName(id){
   if(n.indexOf(".")>-1) n = n.split(".")[0];
   return n ? n.charAt(0).toUpperCase()+n.slice(1) : "?";
 }
+function taskAssignees(t){
+  if(Array.isArray(t.assignees) && t.assignees.length) return t.assignees;
+  return t.assignee ? [t.assignee] : [];
+}
 function whoChip(table, t){
   const wrap = el("span","who-wrap","");
-  wrap.dataset.assignee = t.assignee || "";
-  const name = t.assignee ? memberName(t.assignee) : "";
-  const b = el("button","who"+(t.assignee?" set":""), t.assignee ? (name.charAt(0)||"?") : "+");
-  b.setAttribute("aria-label", t.assignee ? ("Assigned to "+name) : "Assign this task");
-  b.title = t.assignee ? ("Assigned to "+name) : "Assign";
-  b.onclick = (e)=>{ e.stopPropagation();
+  const ids = taskAssignees(t);
+  wrap.dataset.assignees = ids.join(",");
+  const label = ids.length ? ids.map(function(id){ return memberName(id).charAt(0); }).join("") : "+";
+  const b = el("button","who"+(ids.length?" set":""), label);
+  b.title = ids.length ? ("Assigned to " + ids.map(memberName).join(" & ")) : "Assign";
+  b.setAttribute("aria-label", b.title);
+  b.onclick = function(e){
+    e.stopPropagation();
     const open = ASSIGN && ASSIGN.table===table && ASSIGN.id===t.id;
-    ASSIGN = open ? null : {table:table, id:t.id};
+    ASSIGN = open ? null : { table: table, id: t.id };
     render();
   };
   wrap.appendChild(b);
   if(ASSIGN && ASSIGN.table===table && ASSIGN.id===t.id){
     const pop = el("div","who-pop","");
-    MEMBERS.forEach(m=>{
-      const o = el("button","who-opt"+(t.assignee===m.id?" on":""), memberName(m.id));
-      o.onclick = (e)=>{ e.stopPropagation(); setAssignee(table,t,m.id); };
+    pop.appendChild(el("div","who-hint","Tap to add or remove — more than one is fine."));
+    MEMBERS.forEach(function(m){
+      const on = ids.indexOf(m.id) > -1;
+      const o = el("button","who-opt"+(on?" on":""), (on ? "✓ " : "") + memberName(m.id));
+      o.onclick = function(e){ e.stopPropagation(); toggleAssignee(table, t, m.id); };
       pop.appendChild(o);
     });
-    const any = el("button","who-opt"+(!t.assignee?" on":""), "Anyone");
-    any.onclick = (e)=>{ e.stopPropagation(); setAssignee(table,t,null); };
+    const any = el("button","who-opt"+(ids.length?"":" on"), "Anyone");
+    any.onclick = function(e){ e.stopPropagation(); clearAssignees(table, t); };
     pop.appendChild(any);
+    const done = el("button","who-done","Done");
+    done.onclick = function(e){ e.stopPropagation(); ASSIGN = null; render(); };
+    pop.appendChild(done);
     wrap.appendChild(pop);
   }
   return wrap;
 }
-async function setAssignee(table, t, uid){
-  ASSIGN = null;
-  const prev = t.assignee;
-  t.assignee = uid;
+async function writeAssignees(table, t, ids){
+  const prev = taskAssignees(t).slice();
+  t.assignees = ids;
+  t.assignee  = ids.length ? ids[0] : null;
   render();
-  const {error} = await sb.from(table).update({assignee: uid}).eq("id", t.id);
-  if(error){ t.assignee = prev; render(); toast("Couldn't assign — "+error.message); return; }
+  const { error } = await sb.from(table)
+    .update({ assignees: ids, assignee: ids.length ? ids[0] : null })
+    .eq("id", t.id);
+  if(error){
+    t.assignees = prev;
+    t.assignee  = prev.length ? prev[0] : null;
+    render();
+    toast("Couldn't assign — " + error.message);
+    return null;
+  }
   await refresh(table); render();
-  toast(uid ? ("Assigned to "+memberName(uid)) : "Unassigned");
-  if(uid) notifyAssignee(uid, t.task || t.name || "A new task");
+  return prev;
 }
+async function toggleAssignee(table, t, uid){
+  const ids = taskAssignees(t).slice();
+  const at = ids.indexOf(uid);
+  const adding = at === -1;
+  if(adding) ids.push(uid); else ids.splice(at, 1);
+  const prev = await writeAssignees(table, t, ids);
+  if(prev === null) return;
+  toast(ids.length ? ("Assigned to " + ids.map(memberName).join(" & ")) : "Unassigned");
+  if(adding) notifyAssignee(uid, t.task || t.name || "A new task");
+}
+async function clearAssignees(table, t){
+  ASSIGN = null;
+  const prev = await writeAssignees(table, t, []);
+  if(prev !== null) toast("Unassigned");
+}
+
 
 function taskRow(t){
   const done = t.done_date===todayStr();
@@ -1409,6 +1448,70 @@ async function delRow(table,id){
 }
 
 
+/* ---------- Live sync ---------- */
+let RT = null;
+let RT_DIRTY = {};
+let RT_TIMER = null;
+function typingNow(){
+  const a = document.activeElement;
+  return !!(a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT"));
+}
+function rtFlush(){
+  const tables = Object.keys(RT_DIRTY);
+  if(!tables.length) return;
+  if(typingNow()){ RT_TIMER = setTimeout(rtFlush, 1200); return; }
+  RT_DIRTY = {};
+  Promise.all(tables.map(refresh)).then(function(){ render(); });
+}
+function rtMark(table){
+  RT_DIRTY[table] = true;
+  clearTimeout(RT_TIMER);
+  RT_TIMER = setTimeout(rtFlush, 250);
+}
+function startRealtime(){
+  if(RT) return;
+  RT = sb.channel("home-base-sync");
+  Object.keys(DATA).forEach(function(table){
+    RT.on("postgres_changes", { event: "*", schema: "public", table: table }, function(){
+      rtMark(table);
+    });
+  });
+  RT.subscribe();
+}
+function weekDates(){
+  const now = new Date();
+  const sun = new Date(now);
+  sun.setDate(now.getDate() - now.getDay());
+  sun.setHours(0,0,0,0);
+  const map = {};
+  DAYS.forEach(function(d, i){
+    const dt = new Date(sun);
+    dt.setDate(sun.getDate() + i);
+    map[d] = (dt.getMonth() + 1) + "/" + dt.getDate();
+  });
+  return map;
+}
+function stampMealDates(){
+  const pane = document.querySelector("#pane-meals");
+  if(!pane) return;
+  const card = [...pane.querySelectorAll(".card")].find(function(c){
+    const h = c.querySelector("h3");
+    return h && /this week/i.test(h.textContent || "");
+  });
+  if(!card) return;
+  const dates = weekDates();
+  const todayName = DAYS[new Date().getDay()];
+  const h3 = card.querySelector("h3");
+  if(h3 && !/\d/.test(h3.textContent)) h3.textContent = h3.textContent.trim() + " — week of " + dates[DAYS[0]];
+  [...card.querySelectorAll("*")].forEach(function(e){
+    if(e.children.length) return;
+    const txt = (e.textContent || "").trim();
+    if(DAYS.indexOf(txt) === -1) return;
+    e.textContent = txt + " " + dates[txt];
+    if(txt === todayName) e.classList.add("is-today");
+  });
+}
+
 /* ---------- Barcode scanning ----------
    Native BarcodeDetector where available (Chrome/Android). iOS Safari has no
    BarcodeDetector, so we lazy-load ZXing for it.
@@ -1600,7 +1703,7 @@ function hbDueUpkeep(){
   });
 }
 function hbMyOpenTasks(){
-  const mine = function(t){ return t.assignee && t.assignee === MY_ID; };
+  const mine = function(t){ return taskAssignees(t).indexOf(MY_ID) > -1; };
   return []
     .concat((DATA.weekly_tasks   || []).filter(function(t){ return !t.done && mine(t); }))
     .concat((DATA.handyman_tasks || []).filter(function(t){ return !t.done && mine(t); }))
@@ -1744,13 +1847,15 @@ function applyTaskFilter(){
   document.querySelectorAll(".row").forEach(function(row){
     const w = row.querySelector(".who-wrap");
     if(!w) return;
-    row.style.display = (mine && w.dataset.assignee !== (MY_ID || "")) ? "none" : "";
+    row.style.display = (mine && (w.dataset.assignees || "").split(",").indexOf(MY_ID || "") === -1) ? "none" : "";
   });
 }
 const __render0 = render;
 render = function(){
+  try{ if(DATA.meal_plan) DATA.meal_plan.sort(function(a,b){ return DAYS.indexOf(a.day) - DAYS.indexOf(b.day); }); }catch(e){}
   const out = __render0.apply(this, arguments);
   try{ applyTaskFilter(); }catch(e){}
+  try{ stampMealDates(); }catch(e){}
   return out;
 };
 
