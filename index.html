@@ -98,6 +98,19 @@
     .who-opt:hover{background:var(--bg)}
     .who-opt.on{background:var(--gold);color:var(--ink);font-weight:800}
     .row > .who-wrap{order:1}
+    .scan-bar{margin:0 0 12px}
+    .scan-btn{width:100%;min-height:48px;font-size:15px;font-weight:800}
+    .scan-ov{position:fixed;inset:0;z-index:9000;background:#000;display:flex;align-items:center;justify-content:center}
+    .scan-ov video{width:100%;height:100%;object-fit:cover}
+    .scan-box{position:absolute;left:8%;right:8%;top:34%;height:26%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
+    .scan-status{position:absolute;left:0;right:0;bottom:96px;text-align:center;color:#fff;font-weight:700;font-size:15px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .scan-close{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);min-width:140px;min-height:48px;background:#fff;color:#111;font-weight:800;border-radius:999px;border:0}
+    .modal-ov{position:fixed;inset:0;z-index:9100;background:rgba(17,17,17,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+    .modal{background:var(--card);border-radius:16px;padding:20px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+    .modal-lbl{font-size:12px;font-weight:800;color:var(--muted);margin:12px 0 4px}
+    .modal-in{width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff;box-sizing:border-box}
+    .modal-row{display:flex;gap:8px;margin-top:18px}
+    .modal-row .btn{flex:1;min-height:46px}
     .review-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
     .review-stat{flex:1 1 96px;min-width:96px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:center}
     .review-num{font-size:22px;font-weight:800;color:var(--teal);line-height:1.15}
@@ -886,6 +899,11 @@ $("#rm-add").onclick=async()=>{ const name=$("#rm-name").value.trim(); if(!name)
 
 function renderPantry(){
   const wrap=$("#pantryContent"); wrap.innerHTML="";
+  { const sb2 = el("div","scan-bar","");
+    const sc = el("button","btn btn-gold scan-btn","📷 Scan a barcode");
+    sc.onclick = openScanner;
+    sb2.appendChild(sc);
+    wrap.appendChild(sb2); }
   // (the Amazon-link panel now sits at the bottom — see below)
   const cats=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))].sort();
   const low=DATA.pantry_items.filter(belowPar);
@@ -1390,6 +1408,181 @@ async function delRow(table,id){
   });
 }
 
+
+/* ---------- Barcode scanning ----------
+   Native BarcodeDetector where available (Chrome/Android). iOS Safari has no
+   BarcodeDetector, so we lazy-load ZXing for it.
+   Barcode memory prefers a pantry_items.barcode column and silently falls back
+   to per-device localStorage until that column exists. */
+let SCAN = null;
+let BARCODE_COL = null;
+
+async function barcodeColumnExists(){
+  if(BARCODE_COL !== null) return BARCODE_COL;
+  const { error } = await sb.from("pantry_items").select("barcode").limit(1);
+  BARCODE_COL = !error;
+  return BARCODE_COL;
+}
+function bcMap(){ try{ return JSON.parse(localStorage.getItem("hb_barcodes") || "{}"); }catch(e){ return {}; } }
+function bcRemember(code, id){ const m = bcMap(); m[code] = id; localStorage.setItem("hb_barcodes", JSON.stringify(m)); }
+
+async function itemForBarcode(code){
+  if(await barcodeColumnExists()){
+    const hit = (DATA.pantry_items || []).find(function(x){ return x.barcode === code; });
+    if(hit) return hit;
+  }
+  const id = bcMap()[code];
+  return id ? (DATA.pantry_items || []).find(function(x){ return x.id === id; }) : null;
+}
+async function rememberBarcode(code, item){
+  if(await barcodeColumnExists()){
+    const { error } = await sb.from("pantry_items").update({ barcode: code }).eq("id", item.id);
+    if(!error){ await refresh("pantry_items"); return; }
+  }
+  bcRemember(code, item.id);
+}
+
+/* Open Food Facts: free, no key. Food only — household goods usually miss,
+   and then the user names it once and we remember the barcode. */
+async function lookupBarcodeName(code){
+  try{
+    const r = await fetch("https://world.openfoodfacts.org/api/v2/product/" + encodeURIComponent(code) + ".json?fields=product_name,generic_name");
+    const j = await r.json();
+    if(j.status === 1 && j.product){
+      const n = String(j.product.product_name || j.product.generic_name || "").trim();
+      if(n) return n.charAt(0).toUpperCase() + n.slice(1);
+    }
+  }catch(e){}
+  return "";
+}
+
+async function openScanner(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    toast("This browser can't use the camera."); return;
+  }
+  const ov = el("div","scan-ov","");
+  const video = document.createElement("video");
+  video.setAttribute("playsinline",""); video.muted = true;
+  const box = el("div","scan-box","");
+  const status = el("div","scan-status","Point the camera at a barcode");
+  const done = el("button","btn scan-close","Done");
+  ov.appendChild(video); ov.appendChild(box); ov.appendChild(status); ov.appendChild(done);
+  document.body.appendChild(ov);
+
+  let stream = null, stopped = false, reader = null;
+  const cleanup = function(){
+    stopped = true;
+    try{ if(reader && reader.reset) reader.reset(); }catch(e){}
+    if(stream) stream.getTracks().forEach(function(t){ t.stop(); });
+    ov.remove(); SCAN = null;
+  };
+  done.onclick = cleanup;
+  SCAN = { cleanup: cleanup };
+
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+  }catch(e){
+    status.textContent = "Camera permission denied. Allow camera access and try again.";
+    return;
+  }
+  video.srcObject = stream;
+  try{ await video.play(); }catch(e){}
+
+  let last = 0, busy = false;
+  const onCode = async function(code){
+    const now = Date.now();
+    if(!code || busy || now - last < 1600) return;   // one scan per 1.6s
+    last = now; busy = true;
+    if(navigator.vibrate) navigator.vibrate(40);
+    try{ await handleScan(String(code).trim(), status, cleanup); }
+    finally{ busy = false; }
+  };
+
+  if("BarcodeDetector" in window){
+    const det = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_e","code_128","code_39","itf"] });
+    const tick = async function(){
+      if(stopped) return;
+      try{
+        const hits = await det.detect(video);
+        if(hits && hits.length) await onCode(hits[0].rawValue);
+      }catch(e){}
+      if(!stopped) requestAnimationFrame(tick);
+    };
+    tick();
+  } else {
+    try{
+      const zx = await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm");
+      reader = new zx.BrowserMultiFormatReader();
+      reader.decodeFromVideoElement(video, function(res){ if(res && !stopped) onCode(res.getText()); });
+    }catch(e){
+      status.textContent = "Scanner failed to load. Check your connection.";
+    }
+  }
+}
+
+async function handleScan(code, status, cleanup){
+  const item = await itemForBarcode(code);
+  if(item){
+    const was = item.count;
+    const next = was + 1;
+    const { error } = await sb.from("pantry_items").update({ count: next }).eq("id", item.id);
+    if(error){ status.textContent = "Couldn't update — " + error.message; return; }
+    item.count = next;
+    await refresh("pantry_items");
+    status.textContent = item.name + " — now " + next + " of " + item.par;
+    return;   // stay open: scan a whole haul in one go
+  }
+  status.textContent = "Looking up " + code + "…";
+  const name = await lookupBarcodeName(code);
+  cleanup();
+  openScanAdd(code, name);
+}
+
+function openScanAdd(code, name){
+  const ov = el("div","modal-ov","");
+  const card = el("div","modal","");
+  card.appendChild(el("h3", null, "Add to Stock"));
+  card.appendChild(el("div","sub", name ? ("Barcode " + esc(code)) : ("Barcode " + esc(code) + " — not in the product database, so give it a name.")));
+
+  const nameI = document.createElement("input");
+  nameI.className = "modal-in"; nameI.placeholder = "Item name"; nameI.value = name || "";
+
+  const catS = document.createElement("select");
+  catS.className = "modal-in";
+  allCategories().forEach(function(c){
+    const o = document.createElement("option"); o.value = c; o.textContent = c; catS.appendChild(o);
+  });
+
+  const parI = document.createElement("input");
+  parI.className = "modal-in"; parI.type = "number"; parI.min = "1"; parI.value = "2";
+
+  card.appendChild(el("div","modal-lbl","Name"));      card.appendChild(nameI);
+  card.appendChild(el("div","modal-lbl","Category"));  card.appendChild(catS);
+  card.appendChild(el("div","modal-lbl","Par (how many you like on hand)")); card.appendChild(parI);
+
+  const row = el("div","modal-row","");
+  const cancel = el("button","btn","Cancel");
+  const save = el("button","btn btn-gold","Add item");
+  cancel.onclick = function(){ ov.remove(); };
+  save.onclick = async function(){
+    const n = nameI.value.trim();
+    if(!n){ nameI.focus(); return; }
+    const { data, error } = await sb.from("pantry_items")
+      .insert({ name: n, category: catS.value, par: parseInt(parI.value,10) || 1, count: 1 })
+      .select();
+    if(error){ toast("Couldn't add — " + error.message); return; }
+    await refresh("pantry_items");
+    if(data && data[0]) await rememberBarcode(code, data[0]);
+    ov.remove(); render();
+    toast(n + " added — scan it again next time and it just counts up");
+  };
+  row.appendChild(cancel); row.appendChild(save);
+  card.appendChild(row);
+  ov.appendChild(card);
+  ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+  nameI.focus();
+}
 
 /* ---------- Week in review ---------- */
 function hbDueUpkeep(){
