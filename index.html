@@ -111,6 +111,28 @@
     .scan-ov video{width:100%;height:100%;object-fit:cover}
     .scan-box{position:absolute;left:8%;right:8%;top:34%;height:26%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
     .scan-status{position:absolute;left:0;right:0;bottom:96px;text-align:center;color:#fff;font-weight:700;font-size:15px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .quick-add{display:flex;gap:8px;margin:0 0 12px;align-items:center}
+    .qa-in{flex:1;min-height:46px;padding:0 12px;border:2px solid var(--line);border-radius:12px;font-size:15px;font-family:inherit;background:#fff;box-sizing:border-box}
+    .qa-in:focus{outline:none;border-color:var(--teal)}
+    .qa-mic{min-width:46px;min-height:46px;border-radius:12px;border:2px solid var(--line);background:#fff;font-size:18px;cursor:pointer}
+    .qa-mic.listening{border-color:var(--bad,#d1554f);background:#fdeceb;animation:pulse 1s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+    .qa-add{min-height:46px;padding:0 18px}
+    .due{display:inline-block;margin-left:8px;font-size:11px;font-weight:800;color:var(--teal);background:#eaf3f4;border-radius:999px;padding:2px 8px;vertical-align:middle}
+    .due.overdue{color:#fff;background:#d1554f}
+    .punt-count{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:var(--muted)}
+    .cmt-btn{font-size:13px}
+    .cmt-btn.has{color:var(--teal);font-weight:800}
+    .punt-btn{font-size:15px}
+    .punt-chip.on{background:var(--gold);border-color:var(--gold);color:var(--ink)}
+    .thread{margin:0 0 10px 42px;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+    .cmt{display:flex;gap:6px;align-items:baseline;font-size:14px;padding:3px 0}
+    .cmt-who{font-weight:800;color:var(--teal);white-space:nowrap}
+    .cmt-body{flex:1}
+    .cmt-x{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px}
+    .cmt-form{display:flex;gap:6px;margin-top:8px}
+    .cmt-in{flex:1;min-height:38px;padding:0 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit;background:#fff}
+    .who-opt.rot{border-top:1px solid var(--line);margin-top:4px}
     .install-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:8000;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 12px 34px rgba(0,0,0,.18)}
     .ib-text{flex:1;font-size:13px;font-weight:600;line-height:1.4}
     .ib-x{border:0;background:transparent;color:var(--muted);font-size:15px;min-width:32px;min-height:32px;cursor:pointer}
@@ -373,7 +395,7 @@ let MEMBERS = [];
 let MY_ID = null;
 let TASKFILTER = (localStorage.getItem("hb_taskfilter")||"all");
 let ASSIGN = null;
-let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[]};
+let DATA = {task_comments:[],recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[]};
 
 /* grocery store favorites (per-device preference) */
 /* Stores verified to exist on Instacart (checked live). Whole Foods and Trader Joe's
@@ -816,7 +838,7 @@ function whoChip(table, t){
   wrap.dataset.assignees = ids.join(",");
   wrap.dataset.table = table;
   wrap.dataset.id = t.id;
-  const label = ids.length ? ids.map(function(id){ return memberName(id).charAt(0); }).join("") : "+";
+  const label = ids.length ? ids.map(function(id){ return memberName(id).charAt(0); }).join("") : (t.rotate ? "🔄" : "+");
   const b = el("button","who"+(ids.length?" set":""), label);
   b.title = ids.length ? ("Assigned to " + ids.map(memberName).join(" & ")) : "Assign";
   b.setAttribute("aria-label", b.title);
@@ -839,6 +861,21 @@ function whoChip(table, t){
     const any = el("button","who-opt"+(ids.length?"":" on"), "Anyone");
     any.onclick = function(e){ e.stopPropagation(); clearAssignees(table, t); };
     pop.appendChild(any);
+    if(table === "recurring_tasks"){
+      const rot = el("button","who-opt rot" + (t.rotate ? " on" : ""), (t.rotate ? "✓ " : "") + "🔄 Take turns");
+      rot.onclick = async function(e){
+        e.stopPropagation();
+        const next = !t.rotate;
+        t.rotate = next;
+        ASSIGN = null;
+        render();
+        const { error } = await sb.from("recurring_tasks").update({ rotate: next }).eq("id", t.id);
+        if(error){ t.rotate = !next; render(); toast("Couldn't save — " + error.message); return; }
+        await refresh("recurring_tasks"); render();
+        toast(next ? "Taking turns — it'll swap each time it's done" : "Turns off");
+      };
+      pop.appendChild(rot);
+    }
     const done = el("button","who-done","Done");
     done.onclick = function(e){ e.stopPropagation(); ASSIGN = null; render(); };
     pop.appendChild(done);
@@ -1598,6 +1635,299 @@ function stampMealDates(){
   });
 }
 
+/* ================= Dates, Punt, Comments, Rotation, Quick Add =================== */
+const PUNT_EMOJI = "🏈";
+let SHOW_PUNTED = false;
+let OPEN_THREAD = null;
+
+function startOfWeek(d){
+  const x = new Date(d || Date.now());
+  x.setHours(0,0,0,0);
+  x.setDate(x.getDate() - x.getDay());
+  return x;
+}
+function endOfWeek(d){
+  const x = startOfWeek(d);
+  x.setDate(x.getDate() + 6);
+  return x;
+}
+function isoDate(d){
+  const x = new Date(d);
+  return x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0");
+}
+function prettyDate(iso){
+  if(!iso) return "";
+  const p = String(iso).split("-");
+  const d = new Date(+p[0], +p[1]-1, +p[2]);
+  return DAYS[d.getDay()].slice(0,3) + " " + (d.getMonth()+1) + "/" + d.getDate();
+}
+function isOverdue(iso){
+  if(!iso) return false;
+  return String(iso) < todayStr();
+}
+function isNextWeek(iso){
+  if(!iso) return false;
+  return String(iso) > isoDate(endOfWeek());
+}
+
+async function puntTask(table, t){
+  const target = startOfWeek();
+  target.setDate(target.getDate() + 7);
+  const iso = isoDate(target);
+  const prevDue = t.due_date, prevPunts = t.punts || 0;
+  t.due_date = iso;
+  t.punts = prevPunts + 1;
+  render();
+  const { error } = await sb.from(table).update({ due_date: iso, punts: t.punts }).eq("id", t.id);
+  if(error){
+    t.due_date = prevDue; t.punts = prevPunts;
+    render();
+    toast("Couldn't punt — " + error.message);
+    return;
+  }
+  await refresh(table); render();
+  const n = prevPunts + 1;
+  toastUndo(
+    PUNT_EMOJI + " Punted to next week" + (n >= 3 ? " — that's " + n + " times now" : ""),
+    async function(){
+      await sb.from(table).update({ due_date: prevDue, punts: prevPunts }).eq("id", t.id);
+      await refresh(table); render();
+    }
+  );
+}
+
+function commentsFor(table, id){
+  return (DATA.task_comments || [])
+    .filter(function(c){ return c.task_table === table && c.task_id === id; })
+    .sort(function(a,b){ return (a.created_at || "") < (b.created_at || "") ? -1 : 1; });
+}
+async function addComment(table, id, body){
+  const hh = (DATA.recurring_tasks[0] || DATA.weekly_tasks[0] || DATA.pantry_items[0] || {}).household_id;
+  const { error } = await sb.from("task_comments").insert({
+    household_id: hh, task_table: table, task_id: id, user_id: MY_ID, body: body
+  });
+  if(error){ toast("Couldn't post — " + error.message); return; }
+  await refresh("task_comments"); render();
+}
+function commentThread(table, id){
+  const wrap = el("div","thread","");
+  const list = commentsFor(table, id);
+  if(!list.length) wrap.appendChild(el("div","sub","No notes yet. First one's yours."));
+  list.forEach(function(c){
+    const row = el("div","cmt","");
+    row.appendChild(el("span","cmt-who", memberName(c.user_id) + ":"));
+    row.appendChild(el("span","cmt-body", esc(c.body)));
+    if(c.user_id === MY_ID){
+      const x = el("button","cmt-x","✕");
+      x.onclick = async function(){
+        await sb.from("task_comments").delete().eq("id", c.id);
+        await refresh("task_comments"); render();
+      };
+      row.appendChild(x);
+    }
+    wrap.appendChild(row);
+  });
+  const form = el("div","cmt-form","");
+  const inp = document.createElement("input");
+  inp.className = "cmt-in";
+  inp.placeholder = "Add a note…";
+  const send = el("button","btn btn-gold btn-sm","Post");
+  const submit = async function(){
+    const v = inp.value.trim();
+    if(!v) return;
+    inp.value = "";
+    await addComment(table, id, v);
+  };
+  send.onclick = submit;
+  inp.onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); submit(); } };
+  form.appendChild(inp); form.appendChild(send);
+  wrap.appendChild(form);
+  return wrap;
+}
+
+function decorateTaskRows(){
+  document.querySelectorAll(".row").forEach(function(row){
+    const w = row.querySelector(".who-wrap");
+    if(!w || !w.dataset.table || !w.dataset.id) return;
+    if(row.dataset.decorated) return;
+    row.dataset.decorated = "1";
+
+    const table = w.dataset.table;
+    const id = w.dataset.id;
+    const rec = (DATA[table] || []).find(function(x){ return x.id === id; });
+    if(!rec) return;
+
+    const grow = row.querySelector(".grow");
+
+    if(rec.due_date && grow){
+      const chip = el("span","due" + (isOverdue(rec.due_date) ? " overdue" : ""), prettyDate(rec.due_date));
+      grow.appendChild(chip);
+    }
+    if((rec.punts || 0) > 0 && grow){
+      grow.appendChild(el("span","punt-count", PUNT_EMOJI + " x" + rec.punts));
+    }
+
+    const n = commentsFor(table, id).length;
+    const cbtn = el("button","icon-btn cmt-btn" + (n ? " has" : ""), "💬" + (n ? " " + n : ""));
+    cbtn.title = "Notes";
+    cbtn.onclick = function(e){
+      e.stopPropagation();
+      const open = OPEN_THREAD && OPEN_THREAD.table === table && OPEN_THREAD.id === id;
+      OPEN_THREAD = open ? null : { table: table, id: id };
+      render();
+    };
+    row.appendChild(cbtn);
+
+    if(table === "weekly_tasks" || table === "handyman_tasks"){
+      const p = el("button","icon-btn punt-btn", PUNT_EMOJI);
+      p.title = "Punt to next week";
+      p.onclick = function(e){ e.stopPropagation(); puntTask(table, rec); };
+      row.appendChild(p);
+    }
+
+    if(isNextWeek(rec.due_date) && !SHOW_PUNTED){
+      row.style.display = "none";
+    }
+
+    if(OPEN_THREAD && OPEN_THREAD.table === table && OPEN_THREAD.id === id){
+      const th = commentThread(table, id);
+      row.parentNode.insertBefore(th, row.nextSibling);
+    }
+  });
+}
+
+function parseQuickAdd(raw){
+  let text = String(raw || "").trim();
+  if(!text) return null;
+  const out = { table: "weekly_tasks", fields: {} };
+  let lower = text.toLowerCase();
+
+  for(let i = 0; i < MEMBERS.length; i++){
+    const name = memberName(MEMBERS[i].id);
+    const re = new RegExp("\\b(?:for|@)\\s*" + name.toLowerCase() + "\\b", "i");
+    if(re.test(lower)){
+      out.fields.assignees = [MEMBERS[i].id];
+      out.fields.assignee = MEMBERS[i].id;
+      text = text.replace(re, "").trim();
+      lower = text.toLowerCase();
+      break;
+    }
+  }
+
+  const every = lower.match(/\bevery\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+  if(every){
+    const day = every[1].charAt(0).toUpperCase() + every[1].slice(1);
+    out.table = "recurring_tasks";
+    out.fields.day = day;
+    text = text.replace(new RegExp("\\bevery\\s+" + every[1] + "\\b", "i"), "").trim();
+    out.fields.task = text.replace(/\s{2,}/g, " ").replace(/^[\s,-]+|[\s,-]+$/g, "").trim();
+    return out.fields.task ? out : null;
+  }
+
+  let due = null;
+  if(/\btoday\b/.test(lower)){
+    due = todayStr();
+    text = text.replace(/\btoday\b/i, "").trim();
+  } else if(/\btomorrow\b/.test(lower)){
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    due = isoDate(d);
+    text = text.replace(/\btomorrow\b/i, "").trim();
+  } else if(/\bnext week\b/.test(lower)){
+    const d = startOfWeek(); d.setDate(d.getDate() + 7);
+    due = isoDate(d);
+    text = text.replace(/\bnext week\b/i, "").trim();
+  } else {
+    const dow = lower.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
+    if(dow){
+      const want = DAYS.indexOf(dow[1].charAt(0).toUpperCase() + dow[1].slice(1));
+      const d = new Date(); d.setHours(0,0,0,0);
+      let delta = (want - d.getDay() + 7) % 7;
+      if(delta === 0) delta = 7;
+      d.setDate(d.getDate() + delta);
+      due = isoDate(d);
+      text = text.replace(new RegExp("\\b" + dow[1] + "\\b", "i"), "").trim();
+    }
+  }
+  if(due) out.fields.due_date = due;
+
+  text = text.replace(/\s{2,}/g, " ").replace(/^[\s,-]+|[\s,-]+$/g, "").trim();
+  if(!text) return null;
+  out.fields.task = text;
+  return out;
+}
+
+async function quickAdd(raw){
+  const parsed = parseQuickAdd(raw);
+  if(!parsed){ toast("Give it a name and I'll add it."); return false; }
+  const { error } = await sb.from(parsed.table).insert(parsed.fields);
+  if(error){ toast("Couldn't add — " + error.message); return false; }
+  await refresh(parsed.table); render();
+  const bits = [];
+  if(parsed.table === "recurring_tasks") bits.push("every " + parsed.fields.day);
+  if(parsed.fields.due_date) bits.push(prettyDate(parsed.fields.due_date));
+  if(parsed.fields.assignee) bits.push("for " + memberName(parsed.fields.assignee));
+  toast("Added" + (bits.length ? " — " + bits.join(", ") : ""));
+  return true;
+}
+
+function speechSupported(){
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+function startDictation(input, btn){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ toast("This browser can't do voice. On iPhone, use the mic on the keyboard."); return; }
+  const rec = new SR();
+  rec.lang = "en-US";
+  rec.interimResults = true;
+  rec.continuous = false;
+  btn.classList.add("listening");
+  btn.textContent = "●";
+  rec.onresult = function(e){
+    let txt = "";
+    for(let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+    input.value = txt;
+  };
+  rec.onerror = function(e){ toast("Voice didn't work (" + (e.error || "error") + ")."); };
+  rec.onend = function(){
+    btn.classList.remove("listening");
+    btn.textContent = "🎤";
+    input.focus();
+  };
+  try{ rec.start(); }catch(e){ btn.classList.remove("listening"); btn.textContent = "🎤"; }
+}
+
+function quickAddBar(){
+  const host = document.querySelector("#tasksContent");
+  if(!host || !host.parentNode) return;
+  if(document.getElementById("quickAdd")) return;
+  const bar = el("div","quick-add","");
+  bar.id = "quickAdd";
+
+  const inp = document.createElement("input");
+  inp.className = "qa-in";
+  inp.placeholder = "Add anything — “water orchids every Sunday”, “call plumber Friday for Mourad”";
+
+  const mic = el("button","qa-mic","🎤");
+  mic.title = "Say it instead";
+  mic.onclick = function(){ startDictation(inp, mic); };
+  if(!speechSupported()) mic.style.display = "none";
+
+  const add = el("button","btn btn-gold qa-add","Add");
+  const go = async function(){
+    const v = inp.value;
+    if(!v.trim()) return;
+    const ok = await quickAdd(v);
+    if(ok) inp.value = "";
+  };
+  add.onclick = go;
+  inp.onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); go(); } };
+
+  bar.appendChild(inp);
+  bar.appendChild(mic);
+  bar.appendChild(add);
+  host.parentNode.insertBefore(bar, host);
+}
+
 /* ---------- Add to Home Screen ----------
    Apple only allows notifications and the camera once the app is installed,
    so this is not a nicety — half the product depends on it. */
@@ -2160,6 +2490,14 @@ function taskFilterBar(){
     b.onclick = function(){ TASKFILTER = p[0]; localStorage.setItem("hb_taskfilter", p[0]); render(); };
     bar.appendChild(b);
   });
+  const punted = []
+    .concat(DATA.weekly_tasks || [], DATA.handyman_tasks || [])
+    .filter(function(t){ return !t.done && isNextWeek(t.due_date); });
+  if(punted.length){
+    const pb = el("button","chip-toggle punt-chip" + (SHOW_PUNTED ? " on" : ""), PUNT_EMOJI + " Next week " + punted.length);
+    pb.onclick = function(){ SHOW_PUNTED = !SHOW_PUNTED; render(); };
+    bar.appendChild(pb);
+  }
 }
 function applyTaskFilter(){
   taskFilterBar();
@@ -2174,8 +2512,10 @@ const __render0 = render;
 render = function(){
   try{ if(DATA.meal_plan) DATA.meal_plan.sort(function(a,b){ return DAYS.indexOf(a.day) - DAYS.indexOf(b.day); }); }catch(e){}
   const out = __render0.apply(this, arguments);
+  try{ quickAddBar(); }catch(e){}
   try{ applyTaskFilter(); }catch(e){}
   try{ makeTasksEditable(); }catch(e){}
+  try{ decorateTaskRows(); }catch(e){}
   try{ stampMealDates(); }catch(e){}
   return out;
 };
