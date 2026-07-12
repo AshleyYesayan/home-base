@@ -111,6 +111,7 @@
     .scan-ov video{width:100%;height:100%;object-fit:cover}
     .scan-box{position:absolute;left:8%;right:8%;top:34%;height:26%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
     .scan-status{position:absolute;left:0;right:0;bottom:96px;text-align:center;color:#fff;font-weight:700;font-size:15px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .scan-diag{position:absolute;bottom:84px;left:0;right:0;text-align:center;color:rgba(255,255,255,.75);font-size:11px;font-weight:600;letter-spacing:.02em}
     .scan-actions{position:absolute;bottom:26px;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:0 20px}
     .scan-close{min-width:130px;min-height:48px;background:#fff;color:#111;font-weight:800;border-radius:999px;border:0}
     .modal-ov{position:fixed;inset:0;z-index:9100;background:rgba(17,17,17,.55);display:flex;align-items:center;justify-content:center;padding:20px}
@@ -1597,6 +1598,7 @@ function stampMealDates(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
+const BUILD_ID = "build 12";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -1687,18 +1689,21 @@ async function openScanner(){
   const ov = el("div","scan-ov","");
   const video = document.createElement("video");
   video.setAttribute("playsinline","");
+  video.setAttribute("webkit-playsinline","");
   video.setAttribute("autoplay","");
   video.setAttribute("muted","");
   video.muted = true;
+  video.playsInline = true;
   const box    = el("div","scan-box","");
   const status = el("div","scan-status","Starting the camera…");
+  const diag   = el("div","scan-diag", BUILD_ID);
   const bar    = el("div","scan-actions","");
   const done   = el("button","btn scan-close","Done");
   bar.appendChild(done);
-  ov.appendChild(video); ov.appendChild(box); ov.appendChild(status); ov.appendChild(bar);
+  ov.appendChild(video); ov.appendChild(box); ov.appendChild(status); ov.appendChild(diag); ov.appendChild(bar);
   document.body.appendChild(ov);
 
-  let stream = null, stopped = false;
+  let stream = null, stopped = false, frames = 0, engine = "-";
   const cleanup = function(){
     stopped = true;
     if(stream) stream.getTracks().forEach(function(t){ t.stop(); });
@@ -1708,20 +1713,55 @@ async function openScanner(){
   done.onclick = cleanup;
   SCAN = { cleanup: cleanup };
 
+  // A live readout, so a failure is never silent again.
+  const heartbeat = setInterval(function(){
+    if(stopped){ clearInterval(heartbeat); return; }
+    diag.textContent = BUILD_ID + " · " + engine +
+      " · video " + (video.videoWidth || 0) + "x" + (video.videoHeight || 0) +
+      " · frames " + frames;
+  }, 400);
+
   try{
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false
     });
   }catch(e){
-    status.textContent = "Camera blocked (" + (e.name || "error") + "). Allow camera access for this site and try again.";
+    status.textContent = "Camera blocked (" + (e.name || "error") + "). Allow camera access for this site, then try again.";
     return;
   }
 
   video.srcObject = stream;
-  try{ await video.play(); }catch(e){}
 
-  // Sharper frames help a lot on small barcodes.
+  // iOS often rejects play() here because awaiting getUserMedia loses the tap.
+  // Swallowing that is what made this look like nothing was happening.
+  try{
+    await video.play();
+  }catch(e){
+    try{ video.load(); await video.play(); }
+    catch(e2){
+      status.textContent = "The camera won't start playing (" + (e2.name || e2.message || "error") + "). Close and tap Scan again.";
+      return;
+    }
+  }
+
+  // Wait for real frames before decoding anything.
+  const gotSize = await new Promise(function(res){
+    if(video.videoWidth) return res(true);
+    let waited = 0;
+    const iv = setInterval(function(){
+      if(stopped){ clearInterval(iv); return res(false); }
+      if(video.videoWidth){ clearInterval(iv); return res(true); }
+      waited += 200;
+      if(waited >= 6000){ clearInterval(iv); return res(false); }
+    }, 200);
+  });
+  if(stopped) return;
+  if(!gotSize){
+    status.textContent = "Camera opened but sent no picture. Close Home Base fully and reopen it, then try again.";
+    return;
+  }
+
   try{
     const track = stream.getVideoTracks()[0];
     const caps = track.getCapabilities ? track.getCapabilities() : {};
@@ -1740,13 +1780,14 @@ async function openScanner(){
     finally{ busy = false; }
   };
 
-  // Chrome / Android have a barcode reader built into the browser — use it.
   if("BarcodeDetector" in window){
     try{
       const det = new BarcodeDetector();
+      engine = "native";
       status.textContent = "Point at the barcode";
       const tick = async function(){
         if(stopped) return;
+        frames++;
         try{
           const hits = await det.detect(video);
           if(hits && hits.length) await onCode(hits[0].rawValue);
@@ -1758,7 +1799,6 @@ async function openScanner(){
     }catch(e){ /* fall through */ }
   }
 
-  // Safari / iOS: no built-in reader. Decode the frames ourselves.
   status.textContent = "Loading the scanner…";
   let zxr;
   try{
@@ -1767,6 +1807,7 @@ async function openScanner(){
     status.textContent = "Scanner failed to load (" + (e.message || e) + "). Check your connection.";
     return;
   }
+  engine = "zxing";
   status.textContent = "Point at the barcode";
 
   const canvas = document.createElement("canvas");
@@ -1776,7 +1817,7 @@ async function openScanner(){
     if(stopped) return;
     const vw = video.videoWidth, vh = video.videoHeight;
     if(vw && vh){
-      // Read the band inside the guide box, scaled to something zxing likes.
+      frames++;
       const cw = Math.floor(vw * 0.92), ch = Math.floor(vh * 0.45);
       const cx = Math.floor((vw - cw) / 2), cy = Math.floor((vh - ch) / 2);
       const scale = Math.min(1, 1000 / cw);
@@ -1789,7 +1830,6 @@ async function openScanner(){
       let code = decodeCanvas(zxr, canvas);
 
       if(!code){
-        // The bars may be running vertically because of how the item is held.
         rot.width = dh; rot.height = dw;
         const rctx = rot.getContext("2d", { willReadFrequently: true });
         rctx.save();
