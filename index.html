@@ -93,6 +93,7 @@
     .who{width:32px;height:32px;min-width:32px;border-radius:999px;border:1px dashed var(--line);background:var(--card);color:var(--muted);font-weight:800;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
     .who:hover{border-color:var(--teal);color:var(--teal)}
     .who.set{border:1px solid var(--gold);background:var(--gold);color:var(--ink)}
+    .who-wrap.shared .who.set{background:linear-gradient(135deg,var(--gold) 50%,var(--teal) 50%);color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
     .who-pop{position:absolute;right:0;top:38px;z-index:40;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px;display:flex;flex-direction:column;gap:2px;min-width:150px;box-shadow:0 12px 30px rgba(0,0,0,.16)}
     .who-opt{min-height:40px;padding:0 12px;text-align:left;background:transparent;border:0;color:var(--ink);border-radius:8px;font-size:14px;cursor:pointer;white-space:nowrap}
     .who-opt:hover{background:var(--bg)}
@@ -860,6 +861,7 @@ function whoChip(table, t){
   wrap.dataset.table = table;
   wrap.dataset.id = t.id;
   const label = ids.length ? ids.map(function(id){ return memberName(id).charAt(0); }).join("") : (t.rotate ? "🔄" : "+");
+  if(ids.length > 1) wrap.classList.add("shared");
   const b = el("button","who"+(ids.length?" set":""), label);
   b.title = ids.length ? ("Assigned to " + ids.map(memberName).join(" & ")) : "Assign";
   b.setAttribute("aria-label", b.title);
@@ -1448,6 +1450,16 @@ function blockOf(day){
 }
 
 /* Ad-hoc tasks for a given week, split by block */
+function isMine(t){
+  return taskAssignees(t).indexOf(MY_ID) > -1;
+}
+function isShared(t){
+  return taskAssignees(t).length > 1;
+}
+/* When "Mine" is on, a task assigned to me AND Mourad still counts as mine. */
+function mineOnly(list){
+  return (TASKFILTER === "mine") ? list.filter(isMine) : list;
+}
 function weekTasks(weekIso){
   const all = (DATA.weekly_tasks || []).filter(function(t){
     return !t.done && (t.week_start || thisWeekStart()) === weekIso;
@@ -1572,7 +1584,7 @@ function paintWeekSummary(wrap){
 
 /* A repeating routine, folded into one line you can open */
 function routineGroup(day){
-  const all = templateFor(day);
+  const all = mineOnly(templateFor(day));
   if(!all.length) return null;
   const left = all.filter(function(t){ return t.done_date !== todayStr(); });
   const key = "routine:" + day;
@@ -1637,9 +1649,18 @@ function paintWeek(wrap){
   const band = el("div","week-band", "This week · " + weekLabel(thisW));
   wrap.appendChild(band);
 
+  const bar = el("div","filter-bar","");
+  [["all","Everyone"],["mine","Mine"]].forEach(function(p){
+    const b = el("button","chip-toggle" + (TASKFILTER === p[0] ? " on" : ""), p[1]);
+    b.onclick = function(){
+      TASKFILTER = p[0];
+      localStorage.setItem("hb_taskfilter", p[0]);
+      render();
+    };
+    bar.appendChild(b);
+  });
   const toggle = el("button","chip-toggle" + (SHOW_DONE ? " on" : ""), SHOW_DONE ? "Hiding nothing" : "Show done");
   toggle.onclick = function(){ SHOW_DONE = !SHOW_DONE; render(); };
-  const bar = el("div","filter-bar","");
   bar.appendChild(toggle);
   wrap.appendChild(bar);
 
@@ -1654,7 +1675,7 @@ function paintWeek(wrap){
     const rt = routineGroup(day);
     if(rt) sec.appendChild(rt);
 
-    const mine = t.weekend.filter(function(x){ return x.day === day && (SHOW_DONE || !x.done); });
+    const mine = mineOnly(t.weekend).filter(function(x){ return x.day === day && (SHOW_DONE || !x.done); });
     mine.forEach(function(x){ sec.appendChild(oneOffRow(x)); });
 
     sec.appendChild(addRow("Add a " + day + " task…", day, thisW));
@@ -1667,7 +1688,7 @@ function paintWeek(wrap){
   wd.appendChild(el("h3", null, "📋 Weekdays"));
   WEEKDAYS.forEach(function(day){
     const rt = routineGroup(day);
-    const mine = t.weekday.filter(function(x){ return x.day === day && (SHOW_DONE || !x.done); });
+    const mine = mineOnly(t.weekday).filter(function(x){ return x.day === day && (SHOW_DONE || !x.done); });
     if(!rt && !mine.length) return;
     const sec = el("div","wk-day","");
     sec.appendChild(el("div","day-head", day));
@@ -1679,7 +1700,7 @@ function paintWeek(wrap){
   wrap.appendChild(wd);
 
   /* ---------- ANYTIME ---------- */
-  const anyList = t.any.filter(function(x){ return SHOW_DONE || !x.done; });
+  const anyList = mineOnly(t.any).filter(function(x){ return SHOW_DONE || !x.done; });
   const an = el("div","card","");
   an.appendChild(el("h3", null, "🗒️ Anytime this week" + (anyList.length ? ' <span class="pill">' + anyList.length + "</span>" : "")));
   an.appendChild(el("div","sub","No particular day — like the ATM run. Give it a day and it moves up."));
@@ -2827,7 +2848,7 @@ function taskFilterBar(){
 function applyTaskFilter(){
   taskFilterBar();
   const mine = (TASKFILTER === "mine");
-  document.querySelectorAll(".row").forEach(function(row){
+  document.querySelectorAll("#pane-recurring .row, #pane-handyman .row").forEach(function(row){
     const w = row.querySelector(".who-wrap");
     if(!w) return;
     row.style.display = (mine && (w.dataset.assignees || "").split(",").indexOf(MY_ID || "") === -1) ? "none" : "";
