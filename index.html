@@ -2095,12 +2095,11 @@ function decorateTaskRows(){
 function parseQuickAdd(raw){
   let text = String(raw || "").trim();
   if(!text) return null;
-  // people type "add a task for Mourad for Sunday" — drop the polite scaffolding
-  text = text.replace(/^\s*(?:please\s+)?add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|item)?\s*(?:to|for)?\s*/i, "").trim();
-  if(!text) return null;
   const out = { table: "weekly_tasks", fields: {} };
   let lower = text.toLowerCase();
 
+  // WHO first — "for Mourad" / "@Mourad" — before we strip any scaffolding,
+  // otherwise the "for" gets eaten and the name is orphaned.
   for(let i = 0; i < MEMBERS.length; i++){
     const name = memberName(MEMBERS[i].id);
     const re = new RegExp("\\b(?:for|@)\\s*" + name.toLowerCase() + "\\b", "i");
@@ -2112,6 +2111,11 @@ function parseQuickAdd(raw){
       break;
     }
   }
+
+  // now drop the polite scaffolding people actually type
+  text = text.replace(/^\s*(?:please\s+)?add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|item)\b\s*(?:to|for)?\s*/i, "").trim();
+  text = text.replace(/^[\s,:;—–-]+/, "").trim();
+  lower = text.toLowerCase();
 
   const every = lower.match(/\bevery\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
   if(every){
@@ -2150,7 +2154,11 @@ function parseQuickAdd(raw){
   }
   if(due) out.fields.due_date = due;
 
-  text = text.replace(/\s{2,}/g, " ").replace(/\s+for\s*$/i, "").replace(/^[\s,-]+|[\s,-]+$/g, "").trim();
+  text = text
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+for\s*$/i, "")
+    .replace(/^[\s,:;—–-]+|[\s,:;—–-]+$/g, "")
+    .trim();
   if(!text) return null;
   out.fields.task = text.charAt(0).toUpperCase() + text.slice(1);
   return out;
