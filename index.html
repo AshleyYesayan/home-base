@@ -1709,57 +1709,7 @@ function paintWeek(wrap){
     wrap.appendChild(c);
   }
 }
-function paintWeek(wrap){
-  if(!wrap) return;
-  wrap.innerHTML = "";
 
-  const thisW = thisWeekStart();
-  const nextW = nextWeekStart();
-  const t = weekTasks(thisW);
-  const n = weekTasks(nextW);
-
-  wrap.appendChild(el("div","week-band", "This week · " + weekLabel(thisW)));
-
-  wrap.appendChild(blockCard(
-    "🧹 Weekend",
-    "Saturday and Sunday. Give each one a day and a person.",
-    t.weekend, WEEKEND, thisW, "Saturday"
-  ));
-
-  wrap.appendChild(blockCard(
-    "📋 Weekdays",
-    "Monday to Friday.",
-    t.weekday, WEEKDAYS, thisW, null
-  ));
-
-  wrap.appendChild(blockCard(
-    "🗒️ Anytime this week",
-    "No particular day — like the ATM run.",
-    t.any, [], thisW, null
-  ));
-
-  const nextTotal = n.weekday.length + n.weekend.length + n.any.length;
-  if(nextTotal){
-    const c = el("div","card next-week","");
-    c.appendChild(el("h3", null, PUNT_EMOJI + " Next week · " + weekLabel(nextW) + ' <span class="pill">' + nextTotal + "</span>"));
-    c.appendChild(el("div","sub","Punted out of this week. They'll come back on their own."));
-    [].concat(n.weekend, n.weekday, n.any).forEach(function(x){
-      const row = el("div","row","");
-      const g = el("div","grow","");
-      g.innerHTML = '<div class="title">' + esc(x.task) + "</div>";
-      if(x.day) g.appendChild(el("span","due", x.day.slice(0,3)));
-      const back = el("button","btn btn-sm","Bring back");
-      back.onclick = async function(){
-        await sb.from("weekly_tasks").update({ week_start: thisW, due_date: x.day ? dateOfDayInWeek(thisW, x.day) : null }).eq("id", x.id);
-        await refresh("weekly_tasks"); render();
-        toast("Back on this week");
-      };
-      row.appendChild(g); row.appendChild(back);
-      c.appendChild(row);
-    });
-    wrap.appendChild(c);
-  }
-}
 async function toggleWeekly(t,done){ await sb.from("weekly_tasks").update({done}).eq("id",t.id); t.done=done; renderWeekly(); renderToday(); }
 
 /* HANDYMAN */
