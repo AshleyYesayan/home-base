@@ -881,16 +881,6 @@ function renderPantry(){
   const cats=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))].sort();
   const low=DATA.pantry_items.filter(belowPar);
   // grocery store selector
-  const gs=el("div","card"); gs.appendChild(el("h3",null,"🏬 Grocery store"));
-  const grow=el("div","add-row");
-  const sel=el("select"); getStores().forEach(s=>{ const o=el("option",null,esc(s)); o.value=s; if(s===getStore())o.selected=true; sel.appendChild(o); });
-  sel.onchange=()=>{ setStore(sel.value); render(); };
-  const nameI=el("input"); nameI.placeholder="Add a favorite store"; nameI.style.maxWidth="180px";
-  const addB=el("button","btn btn-sm","Add"); addB.onclick=()=>{ const v=nameI.value.trim(); if(v){ addStore(v); setStore(v); nameI.value=""; render(); } };
-  grow.appendChild(sel); grow.appendChild(nameI); grow.appendChild(addB);
-  gs.appendChild(grow);
-  gs.appendChild(el("div","small muted",`Every 🛒 below opens that item's search at ${esc(getStore())}. Switch stores anytime — the links follow. (Whole Foods and Trader Joe's aren't on Instacart.)`));
-  wrap.appendChild(gs);
   const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Restock list "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
   if(low.length) rc.appendChild(el("div","legend","🛒 open at "+esc(getStore())+"  ·  📦 Amazon  ·  🔎 find & link it"));
   if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
