@@ -254,14 +254,19 @@
     <section class="view" id="view-tasks">
       <div class="view-head"><h2>Tasks</h2></div>
       <nav class="subtabs">
-        <button data-s="pane-recurring" class="active">Recurring</button>
+        <button data-s="pane-week" class="active">This week</button>
+        <button data-s="pane-recurring">Recurring</button>
         <button data-s="pane-handyman">Handyman</button>
         <button data-s="pane-upkeep">Upkeep</button>
         <button data-s="pane-done">Done</button>
       </nav>
-      <div class="pane active" id="pane-recurring">
+      <div class="pane active" id="pane-week">
+        <p class="muted small">Everything on for this week. Recurring chores fill in automatically — anything you add here is a one-off you can punt to next week.</p>
+        <div id="weekContent"></div>
+      </div>
+      <div class="pane" id="pane-recurring">
         <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
-        <p class="muted small" style="margin:0 0 14px">Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it auto-resets each Sunday).</p>
+        <p class="muted small" style="margin:0 0 14px">This is the <strong>template</strong> — it repeats every week. For a one-off like an ATM run, add it under <strong>This week</strong> instead, where you can punt it. Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it auto-resets each Sunday).</p>
         <div id="tasksContent"></div>
       </div>
       <div class="pane" id="pane-handyman">
@@ -1549,7 +1554,10 @@ function blockCard(title, hint, list, tmplDays, weekIso, defaultDay){
 }
 
 function renderWeekly(){
-  const wrap = $("#weeklyContent");
+  paintWeek($("#weeklyContent"));
+  paintWeek($("#weekContent"));
+}
+function paintWeek(wrap){
   if(!wrap) return;
   wrap.innerHTML = "";
 
