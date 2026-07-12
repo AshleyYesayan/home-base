@@ -168,6 +168,7 @@
         <button data-s="pane-recurring" class="active">Recurring</button>
         <button data-s="pane-handyman">Handyman</button>
         <button data-s="pane-upkeep">Upkeep</button>
+        <button data-s="pane-done">Done</button>
       </nav>
       <div class="pane active" id="pane-recurring">
         <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
@@ -189,6 +190,10 @@
             <button class="btn btn-sm" id="rm-add">Add</button>
           </div>
         </div>
+      </div>
+      <div class="pane" id="pane-done">
+        <p class="muted small" style="margin:0 0 14px">Everything you've checked off this week. Tap the ✓ to undo one.</p>
+        <div id="weeklyDone"></div>
       </div>
     </section>
 
@@ -1055,10 +1060,14 @@ function renderWeekly(){
   inp.addEventListener("keydown",e=>{if(e.key==="Enter")b.click();});
   add.appendChild(inp); add.appendChild(b); c.appendChild(add);
   wrap.appendChild(c);
-  if(done.length){
-    const dc=el("div","card"); dc.appendChild(el("h3",null,`✅ Done <span class="pill good">${done.length}</span>`));
+  // Done lives on the Tasks tab now — the Dashboard only shows what's still outstanding.
+  const dwrap=$("#weeklyDone");
+  if(dwrap){
+    dwrap.innerHTML="";
+    const dc=el("div","card"); dc.appendChild(el("h3",null,`✅ Done this week <span class="pill good">${done.length}</span>`));
+    if(done.length===0) dc.appendChild(el("div","empty","Nothing checked off yet this week."));
     done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.title="Undo"; chk.onclick=()=>toggleWeekly(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("weekly_tasks",t.id); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
-    wrap.appendChild(dc);
+    dwrap.appendChild(dc);
   }
 }
 async function toggleWeekly(t,done){ await sb.from("weekly_tasks").update({done}).eq("id",t.id); t.done=done; renderWeekly(); renderToday(); }
