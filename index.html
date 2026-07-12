@@ -1499,6 +1499,20 @@ function stampMealDates(){
     return h && /this week/i.test(h.textContent || "");
   });
   if(!card) return;
+
+  // renderMeal emits the days in the order the rows were typed, so put the week
+  // back into real order (Sunday -> Saturday) in the DOM.
+  const mealRows = [...card.querySelectorAll(":scope > .mealday")];
+  if(mealRows.length > 1){
+    const dayIdx = function(r){
+      const m = (r.textContent || "").trim().match(/^([A-Za-z]+)/);
+      return DAYS.indexOf(m ? m[1] : "");
+    };
+    const tail = mealRows[mealRows.length - 1].nextSibling;
+    mealRows.slice().sort(function(a,b){ return dayIdx(a) - dayIdx(b); })
+      .forEach(function(r){ card.insertBefore(r, tail); });
+  }
+
   const dates = weekDates();
   const todayName = DAYS[new Date().getDay()];
   const h3 = card.querySelector("h3");
