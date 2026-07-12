@@ -817,7 +817,7 @@ function renderTasks(){
       const row=el("div","row");
       const chk=el("div","check"); chk.onclick=()=>toggleTask(t);
       const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(t.task)}</div>`;
-      const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("recurring_tasks",t.id);
+      const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("recurring_tasks",t.id); row.appendChild(whoChip("recurring_tasks",t));
       row.appendChild(chk); row.appendChild(g); row.appendChild(del); c.appendChild(row);
     });
     const add=el("div","add-row");
