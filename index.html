@@ -999,7 +999,7 @@ function renderReminders(){
     row.innerHTML=`<div class="grow"><div class="title">${esc(r.name)}</div><div class="sub">Every ${r.interval_n} ${r.interval_unit} · ${d?("next "+d.toLocaleDateString(undefined,{month:"short",day:"numeric"})):"—"}</div></div>`;
     const pill=el("span","pill "+cls, n==null?"set":(n<0?(-n)+"d over":(n===0?"today":n+"d")));
     const b=el("button","btn btn-sm btn-ghost","Done"); b.onclick=()=>markReminder(r.id);
-    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("reminders",r.id);
+    const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("reminders",r.id); row.dataset.table="reminders"; row.dataset.id=r.id;
     row.appendChild(pill); row.appendChild(b); row.appendChild(del); wrap.appendChild(row);
   });
 }
@@ -1693,17 +1693,14 @@ function paintWeek(wrap){
     const c = el("div","card next-week","");
     c.appendChild(el("h3", null, PUNT_EMOJI + " Next week · " + weekLabel(nextW) + ' <span class="pill">' + nextTotal + "</span>"));
     [].concat(n.weekend, n.weekday, n.any).forEach(function(x){
-      const row = el("div","row","");
-      const g = el("div","grow","");
-      g.innerHTML = '<div class="title">' + esc(x.task) + "</div>";
-      if(x.day) g.appendChild(el("span","due", x.day.slice(0,3)));
+      const row = oneOffRow(x);
       const back = el("button","btn btn-sm","Bring back");
       back.onclick = async function(){
         await sb.from("weekly_tasks").update({ week_start: thisW, due_date: x.day ? dateOfDayInWeek(thisW, x.day) : null }).eq("id", x.id);
         await refresh("weekly_tasks"); render();
         toast("Back on this week");
       };
-      row.appendChild(g); row.appendChild(back);
+      row.appendChild(back);
       c.appendChild(row);
     });
     wrap.appendChild(c);
@@ -1734,7 +1731,7 @@ function renderHandyman(){
   wrap.appendChild(c);
   if(done.length){
     const dc=el("div","card"); dc.appendChild(el("h3",null,"✅ Done"));
-    done.forEach(t=>{ const row=el("div","row"); const chk=el("div","check done","✓"); chk.onclick=()=>toggleHandyman(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id); row.appendChild(whoChip("handyman_tasks",t)); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
+    done.forEach(t=>{ const row=el("div","row"); row.dataset.table="recurring_tasks"; row.dataset.id=t.id; const chk=el("div","check done","✓"); chk.onclick=()=>toggleHandyman(t,false); const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div>`; const del=el("button","icon-btn","✕"); del.onclick=()=>delRow("handyman_tasks",t.id); row.appendChild(whoChip("handyman_tasks",t)); row.appendChild(chk); row.appendChild(g); row.appendChild(del); dc.appendChild(row); });
     wrap.appendChild(dc);
   }
 }
@@ -1796,10 +1793,23 @@ async function delRow(table,id){
 /* ---------- Edit a task in place ----------
    Tap the text, fix it, Enter (or tap away) to save. Esc cancels.
    No more delete-and-retype just to fix "Sr Singh". */
+function rowRef(row){
+  if(row.dataset.table && row.dataset.id){
+    return { table: row.dataset.table, id: row.dataset.id };
+  }
+  const w = row.querySelector(".who-wrap");
+  if(w && w.dataset.table && w.dataset.id){
+    return { table: w.dataset.table, id: w.dataset.id };
+  }
+  return null;
+}
+function titleField(table){
+  return (table === "reminders" || table === "pantry_items" || table === "freezer_meals") ? "name" : "task";
+}
 function makeTasksEditable(){
   document.querySelectorAll(".row").forEach(function(row){
-    const w = row.querySelector(".who-wrap");
-    if(!w || !w.dataset.table || !w.dataset.id) return;
+    const ref = rowRef(row);
+    if(!ref) return;
     const title = row.querySelector(".title");
     if(!title || title.dataset.editable) return;
     title.dataset.editable = "1";
@@ -1807,10 +1817,11 @@ function makeTasksEditable(){
     title.title = "Tap to edit";
     title.onclick = function(e){
       e.stopPropagation();
-      startTaskEdit(row, w.dataset.table, w.dataset.id, title);
+      startTaskEdit(row, ref.table, ref.id, title);
     };
   });
 }
+
 function startTaskEdit(row, table, id, title){
   if(row.querySelector(".edit-in")) return;
   const rec = (DATA[table] || []).find(function(x){ return x.id === id; });
