@@ -72,16 +72,27 @@
   .card h3{font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--teal-d);margin-bottom:10px;display:flex;align-items:center;gap:8px}
   .pill{display:inline-block;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;background:#eef4f5;color:var(--teal-d)}
   .pill.bad{background:#fbeae9;color:var(--bad)} .pill.warn{background:#fdf1e0;color:var(--warn)} .pill.good{background:#e8f6ee;color:var(--good)}
-  .row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+  /* Stock rows carry a lot of controls. On a phone the name gets its own line
+     and the controls sit under it, rather than overlapping and clipping. */
+  .stock-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .stock-row:last-child{border-bottom:none}
+  .stock-row .grow{flex:1 1 150px;min-width:0}
+  .stock-row .controls{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin-left:auto}
+  @media(max-width:620px){
+    .stock-row .grow{flex:1 1 100%}
+    .stock-row .controls{margin-left:0;width:100%;justify-content:flex-start;flex-wrap:wrap}
+  }
   .row:last-child{border-bottom:none}
-  .row .grow{flex:1;min-width:0}
+  .row .grow{flex:1 1 140px;min-width:0}
+  .row .title{overflow-wrap:anywhere}
   .row .title{font-weight:700;font-size:15px}
   .row .sub{color:var(--muted);font-size:13px;margin-top:2px}
-  .check{width:22px;height:22px;border-radius:6px;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;flex:none;background:#fff}
+  .check{width:30px;height:30px;border-radius:8px;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;flex:none;background:#fff;font-size:16px}
   .check.done{background:var(--good);border-color:var(--good);color:#fff}
   .done-text{text-decoration:line-through;color:var(--muted)}
   .qty{display:flex;align-items:center;gap:8px}
-  .qty button{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#fff;font-weight:800;font-size:16px;line-height:1}
+  .qty button{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:#fff;font-weight:800;font-size:19px;line-height:1}
   .count-badge{min-width:26px;text-align:center;font-weight:800}
   .qty-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;flex:none}
   .qty-cap{font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);line-height:1}
@@ -97,7 +108,11 @@
   .star.on{color:var(--gold)}
   .tag{display:inline-block;background:#eef4f5;color:var(--teal-d);font-size:12px;font-weight:700;padding:2px 8px;border-radius:20px;margin:2px 3px 0 0}
   .link{color:var(--teal-d);text-decoration:none;font-weight:700}
-  .icon-btn{background:none;border:none;color:var(--muted);font-size:15px;padding:4px 6px;border-radius:6px}
+  .icon-btn{background:none;border:none;color:var(--muted);font-size:16px;min-width:40px;min-height:40px;padding:8px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center}
+  .par-chip{background:none;border:1px dashed var(--line);color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:9px 10px;border-radius:9px;min-height:40px;white-space:nowrap}
+  .par-chip:hover{border-color:var(--teal);color:var(--teal-d)}
+  .legend{font-size:12px;color:var(--muted);margin:6px 0 2px}
+  .allclear{font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted);font-size:13px}
   .icon-btn:hover{background:#f1efe9;color:var(--bad)}
   .empty{color:var(--muted);font-size:14px;padding:8px 0}
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;box-shadow:var(--shadow);z-index:60;opacity:0;transition:opacity .2s}
@@ -292,6 +307,20 @@ const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h
 const todayStr = ()=> new Date().toISOString().slice(0,10);
 const todayName = ()=> DAYS[new Date().getDay()];
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
+/* A delete you can take back. No confirm dialog — that would punish the 99% of
+   taps that are deliberate. Just make the mistake reversible for a few seconds. */
+function toastUndo(msg, undo){
+  const t=$("#toast");
+  t.innerHTML="";
+  const s=el("span",null,msg); s.style.marginRight="14px";
+  const b=el("button",null,"Undo");
+  b.style.cssText="background:none;border:none;color:var(--gold);font-weight:800;font-size:14px;padding:6px 4px;cursor:pointer";
+  b.onclick=async()=>{ clearTimeout(t._t); t.classList.remove("show"); await undo(); };
+  t.appendChild(s); t.appendChild(b);
+  t.classList.add("show");
+  clearTimeout(t._t);
+  t._t=setTimeout(()=>t.classList.remove("show"), 7000);
+}
 
 /* cache */
 let DATA = {recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[]};
@@ -393,12 +422,23 @@ async function unlinkAmazon(p){
 }
 function linkCard(){
   const c = el("div","card"); c.style.cssText="border:2px solid var(--gold);background:#fffdf6";
+  if(!LINK_ASIN && !LINK_OPEN){
+    // Setup, not a daily job — so it stays folded up until you ask for it.
+    const b=el("button","btn btn-ghost btn-sm","🔗 Link an Amazon product");
+    b.onclick=()=>{ LINK_OPEN=true; render(); };
+    c.style.cssText="border:1px dashed var(--line);background:transparent;padding:12px 16px";
+    c.appendChild(b);
+    return c;
+  }
   if(!LINK_ASIN){
     c.appendChild(el("h3",null,"🔗 Link an Amazon product"));
     c.appendChild(el("div","small muted","1. Tap 🔎 next to an item — Amazon opens.  2. Tap the exact product you want, so you're on ITS page (not the search results).  3. Share → Copy Link.  4. Come back here and tap the button below. Short a.co links work fine."));
     const row=el("div","add-row");
     const b=el("button","btn btn-gold","📋 Paste copied Amazon link"); b.id="pasteBtn"; b.onclick=pasteAmazonLink;
     row.appendChild(b); c.appendChild(row);
+    const hide=el("button","btn btn-ghost btn-sm","Close"); hide.style.marginLeft="6px";
+    hide.onclick=()=>{ LINK_OPEN=false; render(); };
+    row.appendChild(hide);
     const i=el("input"); i.id="linkManual"; i.placeholder="…or paste the link here"; i.style.marginTop="10px";
     i.oninput=async ()=>{
       const v=i.value.trim();
@@ -600,6 +640,20 @@ function widgetCard(key, title, build, bare){
 
   build(c);
 
+  // An empty widget shouldn't eat a whole card on the busiest screen —
+  // fold it down to one line and get out of the way.
+  if(!bare){
+    const emptyEl = c.querySelector(":scope > .empty");
+    const hasBody = !!c.querySelector(":scope > .row, :scope > .card, :scope > .add-row");
+    if(emptyEl && !hasBody){
+      const tag = el("span","allclear", emptyEl.textContent);
+      head.insertBefore(tag, sp.nextSibling);
+      emptyEl.remove();
+      c.style.padding = "10px 16px";
+      head.style.marginBottom = "0";
+    }
+  }
+
   c.draggable = true;
   c.addEventListener("dragstart", e => { DASH_DRAG = key; c.style.opacity = ".45"; e.dataTransfer.effectAllowed = "move"; });
   c.addEventListener("dragend",   () => { DASH_DRAG = null; c.style.opacity = ""; c.classList.remove("w-drop"); });
@@ -621,8 +675,10 @@ function renderToday(){
   const wrap=$("#todayContent"); wrap.innerHTML="";
   const tn=todayName();
 
+  const _tt = DATA.recurring_tasks.filter(t=>t.day===tn);
+  const _dn = _tt.filter(t=>t.done_date===todayStr()).length;
   const titles = {
-    tasks:    "✅ "+tn+"'s tasks",
+    tasks:    "✅ "+tn+"'s tasks" + (_tt.length ? `  ${_dn}/${_tt.length}` : ""),
     week:     "📌 This week",
     upkeep:   "🔔 Upkeep due soon",
     restock:  "🛒 Restock list",
@@ -650,8 +706,19 @@ function renderToday(){
     },
     restock: c => {
       const low=DATA.pantry_items.filter(belowPar);
-      if(low.length===0) c.appendChild(el("div","empty","Everything's stocked to par."));
-      low.forEach(p=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(p.name)}</div><div class="sub">${p.count} on hand · par ${p.par} · buy ${p.par-p.count}</div></div><span class="pill bad">low</span>`; c.appendChild(row); });
+      if(low.length===0){ c.appendChild(el("div","empty","Everything's stocked to par.")); return; }
+      low.forEach(p=>{
+        const row=el("div","row");
+        const g=el("div","grow");
+        g.innerHTML=`<div class="title">${esc(p.name)}</div><div class="sub">Buy ${p.par-p.count} — have ${p.count}, par ${p.par}</div>`;
+        // act on it right here — no trip to Stock
+        const shop=aBtn("btn btn-sm btn-ghost","Shop", p.amazon_asin ? amazonCartUrl([{asin:p.amazon_asin, qty:Math.max(1,p.par-p.count)}]) : instacartUrl(p.name));
+        shop.title = p.amazon_asin ? "Add to your Amazon cart" : "Find it at "+getStore();
+        const got=el("button","btn btn-sm","Bought"); got.title="Mark it restocked to par";
+        got.onclick=()=>markBought(p);
+        row.appendChild(g); row.appendChild(shop); row.appendChild(got);
+        c.appendChild(row);
+      });
     },
     freezer: c => {
       const fl=DATA.freezer_meals.filter(lowMeal);
@@ -735,7 +802,7 @@ $("#rm-add").onclick=async()=>{ const name=$("#rm-name").value.trim(); if(!name)
 
 function renderPantry(){
   const wrap=$("#pantryContent"); wrap.innerHTML="";
-  wrap.appendChild(linkCard());
+  // (the Amazon-link panel now sits at the bottom — see below)
   const cats=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))].sort();
   const low=DATA.pantry_items.filter(belowPar);
   // grocery store selector
@@ -750,6 +817,7 @@ function renderPantry(){
   gs.appendChild(el("div","small muted",`Every 🛒 below opens that item's search at ${esc(getStore())}. Switch stores anytime — the links follow. (Whole Foods and Trader Joe's aren't on Instacart.)`));
   wrap.appendChild(gs);
   const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Restock list "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
+  if(low.length) rc.appendChild(el("div","legend","🛒 open at "+esc(getStore())+"  ·  📦 Amazon  ·  🔎 find & link it"));
   if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
   low.forEach(p=>{
     const row=el("div","row");
@@ -797,15 +865,25 @@ function renderPantry(){
       if(p) moveItem(p, cat);
     });
     items.forEach(p=>{
-      const row=el("div","row");
+      const row=el("div","stock-row");
       const short=Math.max(0,p.par-p.count);
       const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(p.name)} ${belowPar(p)?'<span class="pill bad">low</span>':''}</div><div class="sub">${short?`Buy ${short}`:"Stocked"}${p.amazon_asin?" · 📦 linked":""}</div>`;
-      const pq=el("div","qty");
-      const pmi=el("button",null,"−"); pmi.onclick=()=>adjPar(p,-1);
-      const pbg=el("span","count-badge",p.par);
-      const ppl=el("button",null,"+"); ppl.onclick=()=>adjPar(p,1);
-      pq.appendChild(pmi); pq.appendChild(pbg); pq.appendChild(ppl);
-      const pw=el("div","qty-wrap"); pw.appendChild(el("div","qty-cap","Par")); pw.appendChild(pq);
+      // Par is a set-once number; Have is the one that changes. So Par hides
+      // behind a tap and Have gets the big controls.
+      let pw;
+      if(PAR_EDIT===p.id){
+        const pq=el("div","qty");
+        const pmi=el("button",null,"−"); pmi.onclick=()=>adjPar(p,-1);
+        const pbg=el("span","count-badge",p.par);
+        const ppl=el("button",null,"+"); ppl.onclick=()=>adjPar(p,1);
+        const ok=el("button","icon-btn","✓"); ok.title="Done"; ok.onclick=()=>{ PAR_EDIT=null; render(); };
+        pq.appendChild(pmi); pq.appendChild(pbg); pq.appendChild(ppl); pq.appendChild(ok);
+        pw=el("div","qty-wrap"); pw.appendChild(el("div","qty-cap","Par")); pw.appendChild(pq);
+      } else {
+        pw=el("button","par-chip","Par "+p.par);
+        pw.title="Tap to change the target";
+        pw.onclick=()=>{ PAR_EDIT=p.id; render(); };
+      }
       const q=el("div","qty");
       const minus=el("button",null,"−"); minus.onclick=()=>adjPantry(p,-1);
       const badge=el("span","count-badge",p.count);
@@ -819,7 +897,9 @@ function renderPantry(){
       row.draggable=true;
       row.addEventListener("dragstart",e=>{ DRAG_ID=p.id; row.style.opacity=".45"; e.dataTransfer.effectAllowed="move"; });
       row.addEventListener("dragend",()=>{ DRAG_ID=null; row.style.opacity=""; });
-      row.appendChild(g); row.appendChild(pw); row.appendChild(qw); row.appendChild(lk); row.appendChild(mv); row.appendChild(del); c.appendChild(row);
+      const ctl=el("div","controls");
+      ctl.appendChild(pw); ctl.appendChild(qw); ctl.appendChild(lk); ctl.appendChild(mv); ctl.appendChild(del);
+      row.appendChild(g); row.appendChild(ctl); c.appendChild(row);
       if(MOVING===p.id) c.appendChild(movePicker(p, cat));
     });
     wrap.appendChild(c);
@@ -834,8 +914,8 @@ function renderPantry(){
   add.innerHTML=`<input id="pt-name" placeholder="Item name"/><select id="pt-cat" style="max-width:150px">${catOpts}</select><label class="fld"><span>Par</span><input id="pt-par" type="number" min="1" value="2" title="Par — how many you like to keep on hand"/></label><label class="fld"><span>Have</span><input id="pt-cnt" type="number" min="0" value="0" title="How many you have right now"/></label><input id="pt-az" placeholder="Amazon link (optional)" title="Paste the Amazon product link so this item can go straight to your cart"/>`;
   const b=el("button","btn btn-sm","Add"); b.onclick=async()=>{ const n=$("#pt-name").value.trim(); if(!n)return; const asin=asinFrom($("#pt-az").value); await sb.from("pantry_items").insert({name:n,category:$("#pt-cat").value||"Other",par:+$("#pt-par").value||1,count:+$("#pt-cnt").value||0,amazon_asin:asin}); $("#pt-az").value=""; await refresh("pantry_items"); render(); };
   add.appendChild(b); c.appendChild(add);
-  c.appendChild(el("div","small muted","The Amazon link is optional here — easier to add it later by tapping 🔎 next to the item, which takes you straight to Amazon to pick the one you want."));
   wrap.appendChild(c);
+  wrap.appendChild(linkCard());   // setup lives at the bottom, out of the way
 }
 async function adjPantry(p,d){
   const v=Math.max(0,p.count+d);
@@ -849,6 +929,20 @@ async function adjPar(p,d){
   if(error){ toast("Couldn't save — "+error.message); return; }
   p.par=v; render();
 }
+
+/* One tap from the Dashboard: "I bought it" -> back up to par, off the list. */
+async function markBought(p){
+  const was = p.count;
+  const {error}=await sb.from("pantry_items").update({count:p.par}).eq("id",p.id);
+  if(error){ toast("Couldn't save — "+error.message); return; }
+  p.count=p.par; await refresh("pantry_items"); render();
+  toastUndo(`${p.name} restocked`, async ()=>{
+    await sb.from("pantry_items").update({count:was}).eq("id",p.id);
+    await refresh("pantry_items"); render();
+  });
+}
+let PAR_EDIT = null;   // which item is showing its Par stepper
+let LINK_OPEN = false; // the Amazon-link panel is collapsed until you want it
 
 /* ---- moving a staple between lists -------------------------------------
    Two ways in: drag the row onto another list (desktop), or tap ⇄ and pick
@@ -1205,7 +1299,22 @@ async function autoWeeklyRefresh(){
 }
 
 /* generic delete */
-async function delRow(table,id){ await sb.from(table).delete().eq("id",id); await refresh(table); render(); }
+async function delRow(table,id){
+  const snap = (DATA[table]||[]).find(r=>r.id===id);
+  const {error} = await sb.from(table).delete().eq("id",id);
+  if(error){ toast("Couldn't delete — "+error.message); return; }
+  await refresh(table); render();
+  const label = snap ? (snap.name || snap.task || snap.title || "Item") : "Item";
+  toastUndo(`${label} deleted`, async ()=>{
+    if(!snap){ toast("Nothing to restore."); return; }
+    const row = {...snap};
+    delete row.created_at;
+    const {error:e2} = await sb.from(table).insert(row);
+    if(e2){ toast("Couldn't undo — "+e2.message); return; }
+    await refresh(table); render();
+    toast(`${label} restored`);
+  });
+}
 
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function escAttr(s){return esc(s).replace(/'/g,"&#39;");}
