@@ -111,7 +111,9 @@
     .scan-ov video{width:100%;height:100%;object-fit:cover}
     .scan-box{position:absolute;left:8%;right:8%;top:34%;height:26%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
     .scan-status{position:absolute;left:0;right:0;bottom:96px;text-align:center;color:#fff;font-weight:700;font-size:15px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
-    .scan-close{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);min-width:140px;min-height:48px;background:#fff;color:#111;font-weight:800;border-radius:999px;border:0}
+    .scan-actions{position:absolute;bottom:26px;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:0 20px}
+    .scan-close{min-width:130px;min-height:48px;background:#fff;color:#111;font-weight:800;border-radius:999px;border:0}
+    .scan-manual{min-width:150px;min-height:48px;background:rgba(255,255,255,.18);color:#fff;font-weight:800;border-radius:999px;border:2px solid #fff}
     .modal-ov{position:fixed;inset:0;z-index:9100;background:rgba(17,17,17,.55);display:flex;align-items:center;justify-content:center;padding:20px}
     .modal{background:var(--card);border-radius:16px;padding:20px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
     .modal-lbl{font-size:12px;font-weight:800;color:var(--muted);margin:12px 0 4px}
@@ -1640,66 +1642,108 @@ async function lookupBarcodeName(code){
 
 async function openScanner(){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    toast("This browser can't use the camera."); return;
+    toast("This browser can't reach the camera. On iPhone, add Home Base to your Home Screen, then try again.");
+    return;
   }
+
   const ov = el("div","scan-ov","");
   const video = document.createElement("video");
-  video.setAttribute("playsinline",""); video.muted = true;
-  const box = el("div","scan-box","");
-  const status = el("div","scan-status","Point the camera at a barcode");
-  const done = el("button","btn scan-close","Done");
-  ov.appendChild(video); ov.appendChild(box); ov.appendChild(status); ov.appendChild(done);
+  video.setAttribute("playsinline","");
+  video.setAttribute("autoplay","");
+  video.setAttribute("muted","");
+  video.muted = true;
+  const box    = el("div","scan-box","");
+  const status = el("div","scan-status","Starting the camera…");
+  const bar    = el("div","scan-actions","");
+  const manual = el("button","btn scan-manual","Type it instead");
+  const done   = el("button","btn scan-close","Done");
+  bar.appendChild(manual);
+  bar.appendChild(done);
+  ov.appendChild(video); ov.appendChild(box); ov.appendChild(status); ov.appendChild(bar);
   document.body.appendChild(ov);
 
-  let stream = null, stopped = false, reader = null;
+  let stream = null, stopped = false, controls = null;
   const cleanup = function(){
     stopped = true;
-    try{ if(reader && reader.reset) reader.reset(); }catch(e){}
+    try{ if(controls && typeof controls.stop === "function") controls.stop(); }catch(e){}
     if(stream) stream.getTracks().forEach(function(t){ t.stop(); });
-    ov.remove(); SCAN = null;
+    ov.remove();
+    SCAN = null;
   };
   done.onclick = cleanup;
+
+  // Always a way through, even if the camera or the decoder lets us down.
+  manual.onclick = function(){
+    const typed = prompt("Type the barcode number (the digits printed under the bars)");
+    if(typed && typed.trim()){
+      cleanup();
+      handleScanCode(typed.trim().replace(/\D/g, ""));
+    }
+  };
+
   SCAN = { cleanup: cleanup };
 
   try{
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
   }catch(e){
-    status.textContent = "Camera permission denied. Allow camera access and try again.";
+    status.textContent = "Camera blocked (" + (e.name || "error") + "). Allow camera access for this site, or tap “Type it instead”.";
     return;
   }
+
   video.srcObject = stream;
   try{ await video.play(); }catch(e){}
 
   let last = 0, busy = false;
   const onCode = async function(code){
     const now = Date.now();
-    if(!code || busy || now - last < 1600) return;   // one scan per 1.6s
+    if(!code || busy || now - last < 1600) return;
     last = now; busy = true;
     if(navigator.vibrate) navigator.vibrate(40);
     try{ await handleScan(String(code).trim(), status, cleanup); }
     finally{ busy = false; }
   };
 
+  // Chrome / Android: the browser has a barcode reader built in.
   if("BarcodeDetector" in window){
-    const det = new BarcodeDetector({ formats: ["ean_13","ean_8","upc_e","code_128","code_39","itf"] });
-    const tick = async function(){
-      if(stopped) return;
-      try{
-        const hits = await det.detect(video);
-        if(hits && hits.length) await onCode(hits[0].rawValue);
-      }catch(e){}
-      if(!stopped) requestAnimationFrame(tick);
-    };
-    tick();
-  } else {
     try{
-      const zx = await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm");
-      reader = new zx.BrowserMultiFormatReader();
-      reader.decodeFromVideoElement(video, function(res){ if(res && !stopped) onCode(res.getText()); });
-    }catch(e){
-      status.textContent = "Scanner failed to load. Check your connection.";
-    }
+      const det = new BarcodeDetector();   // no format list — an unsupported one throws
+      status.textContent = "Point at the barcode";
+      const tick = async function(){
+        if(stopped) return;
+        try{
+          const hits = await det.detect(video);
+          if(hits && hits.length) await onCode(hits[0].rawValue);
+        }catch(e){}
+        if(!stopped) requestAnimationFrame(tick);
+      };
+      tick();
+      return;
+    }catch(e){ /* fall through to the library */ }
   }
+
+  // Safari / iOS: no built-in reader, so load one.
+  status.textContent = "Loading the scanner…";
+  try{
+    const zx = await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm");
+    const reader = new zx.BrowserMultiFormatReader();
+    controls = await reader.decodeFromVideoElement(video, function(result){
+      if(result && !stopped) onCode(result.getText());
+    });
+    status.textContent = "Point at the barcode";
+  }catch(e){
+    status.textContent = "The scanner wouldn't start (" + (e.message || e) + "). Tap “Type it instead”.";
+  }
+}
+
+/* Manual entry and the camera both end up here. */
+async function handleScanCode(code){
+  if(!code) return;
+  const sink = { textContent: "" };
+  await handleScan(code, sink, function(){});
+  if(sink.textContent) toast(sink.textContent);
 }
 
 async function handleScan(code, status, cleanup){
