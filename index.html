@@ -98,6 +98,11 @@
     .who-opt:hover{background:var(--bg)}
     .who-opt.on{background:var(--gold);color:var(--ink);font-weight:800}
     .row > .who-wrap{order:1}
+    .review-grid{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+    .review-stat{flex:1 1 96px;min-width:96px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:center}
+    .review-num{font-size:22px;font-weight:800;color:var(--teal);line-height:1.15}
+    .review-lbl{font-size:12px;color:var(--muted);font-weight:700;margin-top:2px}
+    .review-list{margin-top:2px}
     .filter-bar{display:flex;gap:6px;margin:0 0 12px}
     .chip-toggle{min-height:36px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
     .chip-toggle.on{background:var(--teal);border-color:var(--teal);color:#fff}
@@ -620,16 +625,14 @@ function render(){ renderToday(); renderTasks(); renderWeekly(); renderHandyman(
    Reorder by dragging the ⠿ handle (desktop) or with ▲ ▼ (works on phones,
    where HTML5 drag never fires). The order is remembered per device.
    Meals is deliberately NOT here — it lives on Kitchen, where you plan it. */
-const DASH_DEFAULT = ["tasks","week","upkeep","restock","freezer","upcoming"];
+const DASH_DEFAULT = ["review","tasks","week","upkeep","restock","freezer","upcoming"];
 function dashOrder(){
-  try{
-    const saved = JSON.parse(localStorage.getItem("hb_dash_order")||"null");
-    if(Array.isArray(saved)){
-      const keep = saved.filter(k=>DASH_DEFAULT.includes(k));
-      return [...keep, ...DASH_DEFAULT.filter(k=>!keep.includes(k))];
-    }
-  }catch(e){}
-  return [...DASH_DEFAULT];
+  let o = [];
+  try{ o = JSON.parse(localStorage.getItem("hb_dash_order") || "null") || []; }catch(e){ o = []; }
+  if(!Array.isArray(o) || !o.length) return DASH_DEFAULT.slice();
+  o = o.filter(function(k){ return DASH_DEFAULT.indexOf(k) > -1; });
+  DASH_DEFAULT.forEach(function(k){ if(o.indexOf(k) === -1) o.unshift(k); });
+  return o;
 }
 function saveDashOrder(o){ try{ localStorage.setItem("hb_dash_order", JSON.stringify(o)); }catch(e){} }
 function paintDash(){ renderToday(); renderWeekly(); renderUpcoming(); }
@@ -700,6 +703,7 @@ function renderToday(){
   const _tt = DATA.recurring_tasks.filter(t=>t.day===tn);
   const _dn = _tt.filter(t=>t.done_date===todayStr()).length;
   const titles = {
+      review: "🗓️ Week in review",
     tasks:    "✅ "+tn+"'s tasks" + (_tt.length ? `  ${_dn}/${_tt.length}` : ""),
     week:     "📌 This week",
     upkeep:   "🔔 Upkeep due soon",
@@ -709,6 +713,7 @@ function renderToday(){
   };
   const bare = { week:true, upcoming:true };
   const builders = {
+      review: c => buildReview(c),
     tasks: c => {
       const tt=DATA.recurring_tasks.filter(t=>t.day===tn).sort((a,b)=>a.position-b.position);
       if(tt.length===0) c.appendChild(el("div","empty","Nothing scheduled for "+tn+"."));
@@ -1386,6 +1391,57 @@ async function delRow(table,id){
   });
 }
 
+
+/* ---------- Week in review ---------- */
+function hbDueUpkeep(){
+  const now = new Date();
+  return (DATA.reminders || []).filter(function(r){
+    if(!r.last_done) return true;
+    const d = new Date(r.last_done);
+    const n = r.interval_n || 1;
+    const u = String(r.interval_unit || "week").toLowerCase();
+    if(u.indexOf("day") === 0)        d.setDate(d.getDate() + n);
+    else if(u.indexOf("month") === 0) d.setMonth(d.getMonth() + n);
+    else if(u.indexOf("year") === 0)  d.setFullYear(d.getFullYear() + n);
+    else                              d.setDate(d.getDate() + 7 * n);
+    return d <= now;
+  });
+}
+function hbMyOpenTasks(){
+  const mine = function(t){ return t.assignee && t.assignee === MY_ID; };
+  return []
+    .concat((DATA.weekly_tasks   || []).filter(function(t){ return !t.done && mine(t); }))
+    .concat((DATA.handyman_tasks || []).filter(function(t){ return !t.done && mine(t); }))
+    .concat((DATA.recurring_tasks|| []).filter(function(t){ return mine(t) && t.done_date !== todayStr(); }));
+}
+function buildReview(c){
+  const mineTasks = hbMyOpenTasks();
+  const low = (DATA.pantry_items || []).filter(function(p){ return p.count < p.par; });
+  const due = hbDueUpkeep();
+
+  const grid = el("div","review-grid","");
+  [[mineTasks.length, "Assigned to you"], [low.length, "Below par"], [due.length, "Upkeep due"]]
+    .forEach(function(r){
+      const b = el("div","review-stat","");
+      b.appendChild(el("div","review-num", String(r[0])));
+      b.appendChild(el("div","review-lbl", r[1]));
+      grid.appendChild(b);
+    });
+  c.appendChild(grid);
+
+  if(mineTasks.length){
+    const list = el("div","review-list","");
+    mineTasks.slice(0,4).forEach(function(t){
+      list.appendChild(el("div","sub","• " + esc(t.task)));
+    });
+    if(mineTasks.length > 4){
+      list.appendChild(el("div","sub","+ " + (mineTasks.length - 4) + " more"));
+    }
+    c.appendChild(list);
+  } else {
+    c.appendChild(el("div","empty","Nothing assigned to you right now."));
+  }
+}
 
 /* ---------- Web Push ---------- */
 const VAPID_PUBLIC = "BCYMdRopZLNiIq6qF-ohRY17BFyJFkFibhtAP6h_k9Nh9EvDmcLwxeoSSaem0RDyCQtEo17X2ktKrPRGWSq6nGI";
