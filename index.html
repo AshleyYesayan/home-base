@@ -111,6 +111,15 @@
     .scan-ov video{width:100%;height:100%;object-fit:cover}
     .scan-box{position:absolute;left:8%;right:8%;top:34%;height:26%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
     .scan-status{position:absolute;left:0;right:0;bottom:96px;text-align:center;color:#fff;font-weight:700;font-size:15px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .routine{border:1px solid var(--line);border-radius:12px;margin:6px 0 8px;overflow:hidden;background:var(--bg)}
+    .routine-head{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;background:transparent;border:0;cursor:pointer;font-family:inherit;text-align:left;min-height:46px}
+    .routine-head.open{border-bottom:1px solid var(--line);background:#fff}
+    .rt-day{font-weight:800;font-size:14px;color:var(--ink)}
+    .rt-count{flex:1;font-size:12px;color:var(--muted);font-weight:700}
+    .rt-caret{color:var(--muted);font-size:12px}
+    .routine .row{padding-left:12px;padding-right:12px;background:#fff}
+    .wk-day{padding:4px 0 10px;border-bottom:1px dashed var(--line)}
+    .wk-day:last-child{border-bottom:0}
     .week-band{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
     .day-head{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--teal);margin:12px 0 2px;padding-top:8px;border-top:1px dashed var(--line)}
     .day-wrap{position:relative;display:inline-flex;flex:0 0 auto;margin-left:6px}
@@ -1456,43 +1465,57 @@ function templateFor(day){
 }
 
 /* Day picker on a weekly task — Sat / Sun / any */
-function dayChip(t){
+function dayChip(t, table, choices){
+  const tbl = table || "weekly_tasks";
+  const days = choices || WEEKDAYS.concat(WEEKEND);
   const wrap = el("span","day-wrap","");
   const b = el("button","daybtn" + (t.day ? " set" : ""), t.day ? t.day.slice(0,3) : "Any day");
-  b.title = "Which day?";
+  b.title = tbl === "recurring_tasks" ? "Which day? (changes the template)" : "Which day?";
   b.onclick = function(e){
     e.stopPropagation();
-    const open = DAYPICK && DAYPICK === t.id;
-    DAYPICK = open ? null : t.id;
+    const key = tbl + ":" + t.id;
+    DAYPICK = (DAYPICK === key) ? null : key;
     render();
   };
   wrap.appendChild(b);
-  if(DAYPICK === t.id){
+  if(DAYPICK === tbl + ":" + t.id){
     const pop = el("div","who-pop","");
-    WEEKDAYS.concat(WEEKEND).forEach(function(d){
+    if(tbl === "recurring_tasks"){
+      pop.appendChild(el("div","who-hint","This is the repeating template — changing the day changes it every week."));
+    }
+    days.forEach(function(d){
       const o = el("button","who-opt" + (t.day === d ? " on" : ""), d);
-      o.onclick = function(e){ e.stopPropagation(); setDay(t, d); };
+      o.onclick = function(e){ e.stopPropagation(); setDay(t, d, tbl); };
       pop.appendChild(o);
     });
-    const any = el("button","who-opt" + (t.day ? "" : " on"), "Any day");
-    any.onclick = function(e){ e.stopPropagation(); setDay(t, null); };
-    pop.appendChild(any);
+    if(tbl === "weekly_tasks"){
+      const any = el("button","who-opt" + (t.day ? "" : " on"), "Any day");
+      any.onclick = function(e){ e.stopPropagation(); setDay(t, null, tbl); };
+      pop.appendChild(any);
+    }
     wrap.appendChild(pop);
   }
   return wrap;
 }
 let DAYPICK = null;
-async function setDay(t, day){
+let OPEN_ROUTINE = null;
+let SHOW_DONE = false;
+async function setDay(t, day, table){
   DAYPICK = null;
+  const tbl = table || "weekly_tasks";
   const prev = t.day, prevDue = t.due_date;
   t.day = day;
-  t.due_date = day ? dateOfDayInWeek(t.week_start || thisWeekStart(), day) : null;
+  if(tbl === "weekly_tasks"){
+    t.due_date = day ? dateOfDayInWeek(t.week_start || thisWeekStart(), day) : null;
+  }
   render();
-  const { error } = await sb.from("weekly_tasks")
-    .update({ day: day, due_date: t.due_date })
-    .eq("id", t.id);
+  const patch = (tbl === "weekly_tasks")
+    ? { day: day, due_date: t.due_date }
+    : { day: day };
+  const { error } = await sb.from(tbl).update(patch).eq("id", t.id);
   if(error){ t.day = prev; t.due_date = prevDue; render(); toast("Couldn't save — " + error.message); return; }
-  await refresh("weekly_tasks"); render();
+  await refresh(tbl); render();
+  if(tbl === "recurring_tasks") toast("Moved to " + day + " — every week from now on");
 }
 
 /* Add straight into a block */
@@ -1510,52 +1533,181 @@ async function addToWeek(text, day, weekIso){
   await refresh("weekly_tasks"); render();
 }
 
-function blockCard(title, hint, list, tmplDays, weekIso, defaultDay){
+
+
+function renderWeekly(){
+  paintWeekSummary($("#weeklyContent"));   // Dashboard: just the numbers, no duplicate list
+  paintWeek($("#weekContent"));            // Tasks -> This week: the real thing
+}
+
+/* The Dashboard should not repeat the whole list. Counts only. */
+function paintWeekSummary(wrap){
+  if(!wrap) return;
+  wrap.innerHTML = "";
+  const thisW = thisWeekStart();
+  const t = weekTasks(thisW);
+  const adhoc = t.weekend.length + t.weekday.length + t.any.length;
+
+  const openRoutine = (DATA.recurring_tasks || []).filter(function(x){ return x.done_date !== todayStr(); }).length;
   const card = el("div","card","");
-  card.appendChild(el("h3", null, title + (list.length ? ' <span class="pill">' + list.length + "</span>" : "")));
-  if(hint) card.appendChild(el("div","sub", hint));
-
-  // the recurring template for these days, so the week is pre-filled
-  (tmplDays || []).forEach(function(day){
-    const tmpl = templateFor(day);
-    if(!tmpl.length) return;
-    card.appendChild(el("div","day-head", day));
-    tmpl.forEach(function(t){ card.appendChild(taskRow(t)); });
+  card.appendChild(el("h3", null, "🗓️ This week · " + weekLabel(thisW)));
+  const grid = el("div","review-grid","");
+  [[openRoutine, "Routine left"], [adhoc, "One-offs"]].forEach(function(p){
+    const b = el("div","review-stat","");
+    b.appendChild(el("div","review-num", String(p[0])));
+    b.appendChild(el("div","review-lbl", p[1]));
+    grid.appendChild(b);
   });
+  card.appendChild(grid);
+  const go = el("button","btn btn-sm","Open this week");
+  go.onclick = function(){
+    const tab = document.querySelector('[data-v="tasks"]');
+    if(tab) tab.click();
+    const sub = [...document.querySelectorAll("nav.subtabs button")].find(function(b){ return /this week/i.test(b.textContent); });
+    if(sub) sub.click();
+  };
+  card.appendChild(go);
+  wrap.appendChild(card);
+}
 
-  if(list.length){
-    if((tmplDays || []).length) card.appendChild(el("div","day-head","Added this week"));
+/* A repeating routine, folded into one line you can open */
+function routineGroup(day){
+  const all = templateFor(day);
+  if(!all.length) return null;
+  const left = all.filter(function(t){ return t.done_date !== todayStr(); });
+  const key = "routine:" + day;
+  const open = OPEN_ROUTINE === key;
+
+  const box = el("div","routine","");
+  const head = el("button","routine-head" + (open ? " open" : ""), "");
+  head.innerHTML = '<span class="rt-day">' + day + " routine</span>" +
+    '<span class="rt-count">' + left.length + " left of " + all.length + "</span>" +
+    '<span class="rt-caret">' + (open ? "▾" : "▸") + "</span>";
+  head.onclick = function(){ OPEN_ROUTINE = open ? null : key; render(); };
+  box.appendChild(head);
+
+  if(open){
+    const list = SHOW_DONE ? all : left;
+    if(!list.length) box.appendChild(el("div","sub","All done. Nice."));
     list.forEach(function(t){
-      const row = el("div","row","");
-      const chk = el("div","check" + (t.done ? " done" : ""), t.done ? "✓" : "");
-      chk.onclick = function(){ toggleWeekly(t); };
-      const g = el("div","grow","");
-      g.innerHTML = '<div class="title">' + esc(t.task) + "</div>";
-      const del = el("button","icon-btn","✕");
-      del.onclick = function(){ delRow("weekly_tasks", t.id); };
-      row.appendChild(chk); row.appendChild(g);
-      row.appendChild(dayChip(t));
-      row.appendChild(whoChip("weekly_tasks", t));
-      row.appendChild(del);
-      card.appendChild(row);
+      const row = taskRow(t);
+      row.appendChild(dayChip(t, "recurring_tasks", WEEKDAYS.concat(WEEKEND)));
+      box.appendChild(row);
     });
   }
+  return box;
+}
 
+function oneOffRow(t){
+  const row = el("div","row","");
+  const chk = el("div","check" + (t.done ? " done" : ""), t.done ? "✓" : "");
+  chk.onclick = function(){ toggleWeekly(t); };
+  const g = el("div","grow","");
+  g.innerHTML = '<div class="title' + (t.done ? " done-text" : "") + '">' + esc(t.task) + "</div>";
+  const del = el("button","icon-btn","✕");
+  del.onclick = function(){ delRow("weekly_tasks", t.id); };
+  row.appendChild(chk); row.appendChild(g);
+  row.appendChild(dayChip(t, "weekly_tasks"));
+  row.appendChild(whoChip("weekly_tasks", t));
+  row.appendChild(del);
+  return row;
+}
+
+function addRow(label, day, weekIso){
   const add = el("div","add-row","");
   const inp = document.createElement("input");
-  inp.placeholder = "Add to " + title.replace(/[^A-Za-z ]/g, "").trim().toLowerCase() + "…";
+  inp.placeholder = label;
   const btn = el("button","btn btn-gold btn-sm","Add");
-  const go = function(){ const v = inp.value; inp.value = ""; addToWeek(v, defaultDay, weekIso); };
+  const go = function(){ const v = inp.value; inp.value = ""; addToWeek(v, day, weekIso); };
   btn.onclick = go;
   inp.onkeydown = function(e){ if(e.key === "Enter"){ e.preventDefault(); go(); } };
   add.appendChild(inp); add.appendChild(btn);
-  card.appendChild(add);
-  return card;
+  return add;
 }
 
-function renderWeekly(){
-  paintWeek($("#weeklyContent"));
-  paintWeek($("#weekContent"));
+function paintWeek(wrap){
+  if(!wrap) return;
+  wrap.innerHTML = "";
+
+  const thisW = thisWeekStart();
+  const nextW = nextWeekStart();
+  const t = weekTasks(thisW);
+  const n = weekTasks(nextW);
+
+  const band = el("div","week-band", "This week · " + weekLabel(thisW));
+  wrap.appendChild(band);
+
+  const toggle = el("button","chip-toggle" + (SHOW_DONE ? " on" : ""), SHOW_DONE ? "Hiding nothing" : "Show done");
+  toggle.onclick = function(){ SHOW_DONE = !SHOW_DONE; render(); };
+  const bar = el("div","filter-bar","");
+  bar.appendChild(toggle);
+  wrap.appendChild(bar);
+
+  /* ---------- WEEKEND: Saturday and Sunday, side by side ---------- */
+  const wk = el("div","card","");
+  wk.appendChild(el("h3", null, "🧹 Weekend"));
+
+  WEEKEND.forEach(function(day){
+    const sec = el("div","wk-day","");
+    sec.appendChild(el("div","day-head", day));
+
+    const rt = routineGroup(day);
+    if(rt) sec.appendChild(rt);
+
+    const mine = t.weekend.filter(function(x){ return x.day === day && (SHOW_DONE || !x.done); });
+    mine.forEach(function(x){ sec.appendChild(oneOffRow(x)); });
+
+    sec.appendChild(addRow("Add a " + day + " task…", day, thisW));
+    wk.appendChild(sec);
+  });
+  wrap.appendChild(wk);
+
+  /* ---------- WEEKDAYS ---------- */
+  const wd = el("div","card","");
+  wd.appendChild(el("h3", null, "📋 Weekdays"));
+  WEEKDAYS.forEach(function(day){
+    const rt = routineGroup(day);
+    const mine = t.weekday.filter(function(x){ return x.day === day && (SHOW_DONE || !x.done); });
+    if(!rt && !mine.length) return;
+    const sec = el("div","wk-day","");
+    sec.appendChild(el("div","day-head", day));
+    if(rt) sec.appendChild(rt);
+    mine.forEach(function(x){ sec.appendChild(oneOffRow(x)); });
+    wd.appendChild(sec);
+  });
+  wd.appendChild(addRow("Add a weekday task…", null, thisW));
+  wrap.appendChild(wd);
+
+  /* ---------- ANYTIME ---------- */
+  const anyList = t.any.filter(function(x){ return SHOW_DONE || !x.done; });
+  const an = el("div","card","");
+  an.appendChild(el("h3", null, "🗒️ Anytime this week" + (anyList.length ? ' <span class="pill">' + anyList.length + "</span>" : "")));
+  an.appendChild(el("div","sub","No particular day — like the ATM run. Give it a day and it moves up."));
+  anyList.forEach(function(x){ an.appendChild(oneOffRow(x)); });
+  an.appendChild(addRow("Add a one-off…", null, thisW));
+  wrap.appendChild(an);
+
+  /* ---------- PUNTED ---------- */
+  const nextTotal = n.weekday.length + n.weekend.length + n.any.length;
+  if(nextTotal){
+    const c = el("div","card next-week","");
+    c.appendChild(el("h3", null, PUNT_EMOJI + " Next week · " + weekLabel(nextW) + ' <span class="pill">' + nextTotal + "</span>"));
+    [].concat(n.weekend, n.weekday, n.any).forEach(function(x){
+      const row = el("div","row","");
+      const g = el("div","grow","");
+      g.innerHTML = '<div class="title">' + esc(x.task) + "</div>";
+      if(x.day) g.appendChild(el("span","due", x.day.slice(0,3)));
+      const back = el("button","btn btn-sm","Bring back");
+      back.onclick = async function(){
+        await sb.from("weekly_tasks").update({ week_start: thisW, due_date: x.day ? dateOfDayInWeek(thisW, x.day) : null }).eq("id", x.id);
+        await refresh("weekly_tasks"); render();
+        toast("Back on this week");
+      };
+      row.appendChild(g); row.appendChild(back);
+      c.appendChild(row);
+    });
+    wrap.appendChild(c);
+  }
 }
 function paintWeek(wrap){
   if(!wrap) return;
