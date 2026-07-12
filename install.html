@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Get Home Base on your phone</title>
+<meta name="theme-color" content="#5FA2AA">
+<meta property="og:title" content="Home Base">
+<meta property="og:description" content="Your household on autopilot — tasks, meals, groceries and reminders. Add it to your home screen in 20 seconds.">
+<meta property="og:image" content="https://ashleyyesayan.github.io/home-base/icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+  :root{ --teal:#5FA2AA; --gold:#F0BB2B; --ink:#1f2933; --muted:#6b7785; --bg:#f6f4ef; --card:#fff; --line:#e7e3da; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Mulish,Lato,Calibri,Carlito,system-ui,sans-serif;line-height:1.6}
+  .wrap{max-width:620px;margin:0 auto;padding:36px 20px 70px}
+  .top{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .top img{width:56px;height:56px;border-radius:14px}
+  h1{font-size:28px;margin:0}
+  .tag{color:var(--muted);margin:2px 0 26px;font-size:15px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0}
+  h2{font-size:17px;margin:0 0 12px;color:var(--teal)}
+  ol{margin:0;padding-left:20px}
+  li{margin:9px 0}
+  .btn{display:block;width:100%;text-align:center;text-decoration:none;min-height:52px;line-height:52px;border-radius:999px;font-weight:800;font-size:16px;border:0;cursor:pointer;font-family:inherit}
+  .btn-gold{background:var(--gold);color:#111}
+  .btn-ghost{background:transparent;color:var(--teal);border:2px solid var(--teal);line-height:48px}
+  .btn + .btn{margin-top:10px}
+  .qr{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .qr canvas{border-radius:12px;border:1px solid var(--line);background:#fff;padding:8px}
+  .link{word-break:break-all;font-size:13px;color:var(--muted);text-align:center}
+  .note{background:#fdf6e3;border:1px solid var(--gold);border-radius:12px;padding:14px 16px;font-size:14px;margin-top:16px}
+  .hide{display:none}
+  footer{margin-top:34px;color:var(--muted);font-size:13px;text-align:center}
+  footer a{color:var(--teal)}
+  kbd{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-family:inherit;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <img src="icon-192.png" alt="">
+    <div>
+      <h1>Home Base</h1>
+    </div>
+  </div>
+  <p class="tag">Your household on autopilot — tasks, meals, groceries and reminders.
+  It installs straight from the web. No App Store, no download.</p>
+
+  <div class="card">
+    <div class="qr">
+      <canvas id="qr" width="200" height="200"></canvas>
+      <div class="link" id="url"></div>
+    </div>
+  </div>
+
+  <div class="card" id="ios">
+    <h2>On iPhone or iPad</h2>
+    <ol>
+      <li>Open this page in <strong>Safari</strong> (not Chrome — Apple only allows installing from Safari).</li>
+      <li>Tap the <strong>Share</strong> button — the square with an arrow pointing up.</li>
+      <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+      <li>Tap <strong>Add</strong>. Home Base is now an icon on your home screen.</li>
+    </ol>
+    <div class="note">
+      <strong>This step matters.</strong> Apple only allows notifications and the barcode
+      scanner to work once Home Base is on your home screen. In a browser tab, they won't.
+    </div>
+  </div>
+
+  <div class="card hide" id="android">
+    <h2>On Android</h2>
+    <ol>
+      <li>Tap <strong>Install Home Base</strong> below.</li>
+      <li>If nothing appears, open the browser menu (<kbd>⋮</kbd>) and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+    </ol>
+    <button class="btn btn-gold" id="installBtn">Install Home Base</button>
+  </div>
+
+  <div class="card">
+    <h2>Share it with someone</h2>
+    <button class="btn btn-gold" id="shareBtn">Share this link</button>
+    <button class="btn btn-ghost" id="copyBtn">Copy link</button>
+    <p class="tag" style="margin:14px 0 0;font-size:14px">
+      Send it to anyone in your household. They follow the same steps, sign in, and you'll
+      all see the same tasks, pantry and meal plan — updating live on every phone.
+    </p>
+  </div>
+
+  <a class="btn btn-ghost" href="./" style="margin-top:6px">Open Home Base now</a>
+
+  <footer>
+    <a href="privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="support.html">Support</a>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script>
+  var APP = location.origin + location.pathname.replace(/install\.html$/, "");
+  var SHARE = location.origin + location.pathname;   // this install page
+
+  document.getElementById("url").textContent = SHARE;
+
+  // QR points at these instructions, so whoever scans it gets the steps too.
+  if (window.QRCode) {
+    QRCode.toCanvas(document.getElementById("qr"), SHARE, {
+      width: 200, margin: 1,
+      color: { dark: "#1f2933", light: "#ffffff" }
+    });
+  }
+
+  var ua = navigator.userAgent || "";
+  var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var isAndroid = /Android/.test(ua);
+  if (isAndroid) {
+    document.getElementById("android").classList.remove("hide");
+    document.getElementById("ios").classList.add("hide");
+  }
+
+  // Android / desktop Chrome can install for real.
+  var deferred = null;
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault();
+    deferred = e;
+    document.getElementById("android").classList.remove("hide");
+  });
+  document.getElementById("installBtn").onclick = function () {
+    if (deferred) { deferred.prompt(); deferred = null; }
+    else { alert("Open your browser menu and choose “Install app” or “Add to Home screen”."); }
+  };
+
+  document.getElementById("shareBtn").onclick = async function () {
+    var data = { title: "Home Base", text: "Add Home Base to your phone — it runs our household.", url: SHARE };
+    if (navigator.share) { try { await navigator.share(data); return; } catch (e) { return; } }
+    copy();
+  };
+  document.getElementById("copyBtn").onclick = copy;
+
+  function copy() {
+    var btn = document.getElementById("copyBtn");
+    function done() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy link"; }, 1800); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(SHARE).then(done, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var t = document.createElement("textarea");
+      t.value = SHARE; document.body.appendChild(t); t.select();
+      try { document.execCommand("copy"); done(); } catch (e) { prompt("Copy this link:", SHARE); }
+      t.remove();
+    }
+  }
+</script>
+</body>
+</html>
