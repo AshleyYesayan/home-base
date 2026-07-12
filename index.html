@@ -62,6 +62,10 @@
   nav.subtabs button.active{background:var(--card);color:var(--teal-d);box-shadow:0 1px 2px rgba(0,0,0,.07)}
   .pane{display:none}
   .pane.active{display:block}
+  .drag-h{cursor:grab;color:var(--muted);font-size:15px;padding:0 2px;user-select:none}
+  .drag-h:active{cursor:grabbing}
+  .w-head{display:flex;align-items:center;gap:6px;margin:0 0 8px;font-size:15px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--teal-d)}
+  .w-drop{border-top:3px solid var(--gold)!important}
   .view-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
   .view-head h2{font-size:22px;font-weight:800}
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
@@ -149,16 +153,11 @@
   </nav>
 
   <main>
-    <!-- DASHBOARD (Today + This Week + Upcoming) -->
+    <!-- DASHBOARD — widgets are reorderable; the order is remembered -->
     <section class="view active" id="view-today">
       <div class="view-head"><h2 id="todayHead">Dashboard</h2></div>
+      <p class="muted small" style="margin:-6px 0 14px">Drag a card by its ⠿ handle to reorder it — or use ▲ ▼, which also work on a phone.</p>
       <div id="todayContent"></div>
-      <div class="view-head" style="margin-top:26px"><h2>This Week</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Extra one-off tasks to get done this week. Check them off as you go.</p>
-      <div id="weeklyContent"></div>
-      <div class="view-head" style="margin-top:26px"><h2>Upcoming</h2></div>
-      <p class="muted small" style="margin:-6px 0 14px">Everything with a date ahead, soonest first. Tap a date to reschedule it.</p>
-      <div id="upcomingContent"></div>
     </section>
 
     <!-- TASKS (Recurring | Handyman | Upkeep) -->
@@ -555,45 +554,116 @@ document.querySelectorAll("nav.subtabs").forEach(bar=>{
 /* ---------- RENDER ---------- */
 function render(){ renderToday(); renderTasks(); renderWeekly(); renderHandyman(); renderUpcoming(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
 
+/* ---- Dashboard widgets -------------------------------------------------
+   Reorder by dragging the ⠿ handle (desktop) or with ▲ ▼ (works on phones,
+   where HTML5 drag never fires). The order is remembered per device.
+   Meals is deliberately NOT here — it lives on Kitchen, where you plan it. */
+const DASH_DEFAULT = ["tasks","week","upkeep","restock","freezer","upcoming"];
+function dashOrder(){
+  try{
+    const saved = JSON.parse(localStorage.getItem("hb_dash_order")||"null");
+    if(Array.isArray(saved)){
+      const keep = saved.filter(k=>DASH_DEFAULT.includes(k));
+      return [...keep, ...DASH_DEFAULT.filter(k=>!keep.includes(k))];
+    }
+  }catch(e){}
+  return [...DASH_DEFAULT];
+}
+function saveDashOrder(o){ try{ localStorage.setItem("hb_dash_order", JSON.stringify(o)); }catch(e){} }
+function paintDash(){ renderToday(); renderWeekly(); renderUpcoming(); }
+function moveWidget(key, dir){
+  const o = dashOrder();
+  const i = o.indexOf(key), j = i + dir;
+  if(i<0 || j<0 || j>=o.length) return;
+  [o[i], o[j]] = [o[j], o[i]];
+  saveDashOrder(o); paintDash();
+}
+let DASH_DRAG = null;
+function widgetCard(key, title, build, bare){
+  const c = el("div", bare ? "" : "card");
+  c.dataset.w = key;
+  if(bare) c.style.marginBottom = "14px";
+
+  const h = el("div", bare ? "w-head" : null);
+  const head = bare ? h : el("h3", null, "");
+  head.textContent = title;
+  head.style.display = "flex";
+  head.style.alignItems = "center";
+  head.style.gap = "6px";
+
+  const sp = el("div"); sp.style.flex = "1";
+  const up = el("button","icon-btn","▲"); up.title = "Move up";   up.onclick = () => moveWidget(key,-1);
+  const dn = el("button","icon-btn","▼"); dn.title = "Move down"; dn.onclick = () => moveWidget(key, 1);
+  const gr = el("span","drag-h","⠿");     gr.title = "Drag to reorder";
+  head.appendChild(sp); head.appendChild(up); head.appendChild(dn); head.appendChild(gr);
+  c.appendChild(head);
+
+  build(c);
+
+  c.draggable = true;
+  c.addEventListener("dragstart", e => { DASH_DRAG = key; c.style.opacity = ".45"; e.dataTransfer.effectAllowed = "move"; });
+  c.addEventListener("dragend",   () => { DASH_DRAG = null; c.style.opacity = ""; c.classList.remove("w-drop"); });
+  c.addEventListener("dragover",  e => { if(!DASH_DRAG || DASH_DRAG===key) return; e.preventDefault(); c.classList.add("w-drop"); });
+  c.addEventListener("dragleave", () => c.classList.remove("w-drop"));
+  c.addEventListener("drop", e => {
+    e.preventDefault(); c.classList.remove("w-drop");
+    if(!DASH_DRAG || DASH_DRAG===key) return;
+    const o = dashOrder();
+    o.splice(o.indexOf(DASH_DRAG), 1);
+    o.splice(o.indexOf(key), 0, DASH_DRAG);
+    saveDashOrder(o); DASH_DRAG = null; paintDash();
+  });
+  return c;
+}
+
 function renderToday(){
   $("#todayHead").textContent = todayName()+" — Dashboard";
   const wrap=$("#todayContent"); wrap.innerHTML="";
   const tn=todayName();
-  // today's tasks
-  const tt=DATA.recurring_tasks.filter(t=>t.day===tn).sort((a,b)=>a.position-b.position);
-  const c1=el("div","card"); c1.appendChild(el("h3",null,"✅ "+tn+"'s tasks"));
-  if(tt.length===0) c1.appendChild(el("div","empty","Nothing scheduled for "+tn+"."));
-  [...tt.filter(t=>t.done_date!==todayStr()), ...tt.filter(t=>t.done_date===todayStr())].forEach(t=>c1.appendChild(taskRow(t)));
-  wrap.appendChild(c1);
 
-  // reminders due
-  const due=DATA.reminders.map(r=>({r,d:nextDue(r)})).filter(x=>x.d&&daysUntil(x.d)<=7).sort((a,b)=>a.d-b.d);
-  const c2=el("div","card"); c2.appendChild(el("h3",null,"🔔 Upkeep due soon"));
-  if(due.length===0) c2.appendChild(el("div","empty","Nothing due in the next week. 🎉"));
-  due.forEach(({r,d})=>{
-    const n=daysUntil(d); const cls=n<0?"bad":(n<=2?"warn":"");
-    const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(r.name)}</div><div class="sub">${n<0?"Overdue by "+(-n)+"d":(n===0?"Due today":"Due in "+n+"d")}</div></div>`;
-    const b=el("button","btn btn-sm btn-ghost","Mark done"); b.onclick=()=>markReminder(r.id); row.appendChild(b); c2.appendChild(row);
+  const titles = {
+    tasks:    "✅ "+tn+"'s tasks",
+    week:     "📌 This week",
+    upkeep:   "🔔 Upkeep due soon",
+    restock:  "🛒 Restock list",
+    freezer:  "🧊 Freezer running low",
+    upcoming: "📅 Upcoming"
+  };
+  const bare = { week:true, upcoming:true };
+  const builders = {
+    tasks: c => {
+      const tt=DATA.recurring_tasks.filter(t=>t.day===tn).sort((a,b)=>a.position-b.position);
+      if(tt.length===0) c.appendChild(el("div","empty","Nothing scheduled for "+tn+"."));
+      [...tt.filter(t=>t.done_date!==todayStr()), ...tt.filter(t=>t.done_date===todayStr())].forEach(t=>c.appendChild(taskRow(t)));
+    },
+    week: c => { const d=el("div"); d.id="weeklyContent"; c.appendChild(d); },
+    upkeep: c => {
+      const due=DATA.reminders.map(r=>({r,d:nextDue(r)})).filter(x=>x.d&&daysUntil(x.d)<=7).sort((a,b)=>a.d-b.d);
+      if(due.length===0) c.appendChild(el("div","empty","Nothing due in the next week. 🎉"));
+      due.forEach(({r,d})=>{
+        const n=daysUntil(d);
+        const row=el("div","row");
+        row.innerHTML=`<div class="grow"><div class="title">${esc(r.name)}</div><div class="sub">${n<0?"Overdue by "+(-n)+"d":(n===0?"Due today":"Due in "+n+"d")}</div></div>`;
+        const b=el("button","btn btn-sm btn-ghost","Mark done"); b.onclick=()=>markReminder(r.id);
+        row.appendChild(b); c.appendChild(row);
+      });
+    },
+    restock: c => {
+      const low=DATA.pantry_items.filter(belowPar);
+      if(low.length===0) c.appendChild(el("div","empty","Everything's stocked to par."));
+      low.forEach(p=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(p.name)}</div><div class="sub">${p.count} on hand · par ${p.par} · buy ${p.par-p.count}</div></div><span class="pill bad">low</span>`; c.appendChild(row); });
+    },
+    freezer: c => {
+      const fl=DATA.freezer_meals.filter(lowMeal);
+      if(fl.length===0) c.appendChild(el("div","empty","Freezer's well stocked."));
+      fl.forEach(m=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(m.name)}</div><div class="sub">${m.qty} portion${m.qty===1?"":"s"} left</div></div><span class="pill warn">low</span>`; c.appendChild(row); });
+    },
+    upcoming: c => { const d=el("div"); d.id="upcomingContent"; c.appendChild(d); }
+  };
+
+  dashOrder().forEach(k=>{
+    if(builders[k]) wrap.appendChild(widgetCard(k, titles[k], builders[k], !!bare[k]));
   });
-  wrap.appendChild(c2);
-  // restock
-  const low=DATA.pantry_items.filter(belowPar);
-  const c3=el("div","card"); c3.appendChild(el("h3",null,"🛒 Restock list"));
-  if(low.length===0) c3.appendChild(el("div","empty","Everything's stocked to par."));
-  low.forEach(p=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(p.name)}</div><div class="sub">${p.count} on hand · par ${p.par} · buy ${p.par-p.count}</div></div><span class="pill bad">low</span>`; c3.appendChild(row); });
-  wrap.appendChild(c3);
-  // freezer low
-  const fl=DATA.freezer_meals.filter(lowMeal);
-  const c4=el("div","card"); c4.appendChild(el("h3",null,"🧊 Freezer running low"));
-  if(fl.length===0) c4.appendChild(el("div","empty","Freezer's well stocked."));
-  fl.forEach(m=>{ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${esc(m.name)}</div><div class="sub">${m.qty} portion${m.qty===1?"":"s"} left</div></div><span class="pill warn">low</span>`; c4.appendChild(row); });
-  wrap.appendChild(c4);
-  // meal plan glance
-  const c5=el("div","card"); c5.appendChild(el("h3",null,"🍽️ This week's meals"));
-  const mp=DATA.meal_plan;
-  if(mp.length===0) c5.appendChild(el("div","empty","No meals planned yet — head to Meal Plan."));
-  MEAL_DAYS.forEach(d=>{ const m=mp.find(x=>x.day===d); if(m&&m.meal_text){ const row=el("div","row"); row.innerHTML=`<div class="grow"><div class="title">${d}</div><div class="sub">${esc(m.meal_text)}</div></div>`; c5.appendChild(row);} });
-  wrap.appendChild(c5);
 }
 
 function taskRow(t){
