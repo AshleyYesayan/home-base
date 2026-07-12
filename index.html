@@ -111,6 +111,9 @@
     .scan-ov video{width:100%;height:100%;object-fit:cover}
     .scan-box{position:absolute;left:8%;right:8%;top:34%;height:26%;border:3px solid var(--gold);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
     .scan-status{position:absolute;left:0;right:0;bottom:96px;text-align:center;color:#fff;font-weight:700;font-size:15px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .install-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:8000;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 12px 34px rgba(0,0,0,.18)}
+    .ib-text{flex:1;font-size:13px;font-weight:600;line-height:1.4}
+    .ib-x{border:0;background:transparent;color:var(--muted);font-size:15px;min-width:32px;min-height:32px;cursor:pointer}
     .scan-diag{position:absolute;bottom:84px;left:0;right:0;text-align:center;color:rgba(255,255,255,.75);font-size:11px;font-weight:600;letter-spacing:.02em}
     .scan-actions{position:absolute;bottom:26px;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:0 20px}
     .scan-close{min-width:130px;min-height:48px;background:#fff;color:#111;font-weight:800;border-radius:999px;border:0}
@@ -198,7 +201,8 @@
     <div class="brand"><span class="dot">🏡</span> Home Base</div>
     <div class="spacer"></div>
     <span class="whoami" id="whoami"></span>
-    <button class="btn btn-ghost btn-sm" id="pushBtn" style="display:none">🔔 Notify me</button>
+    <button class="btn btn-ghost btn-sm" id="getAppBtn">📲 Get the app</button>
+      <button class="btn btn-ghost btn-sm" id="pushBtn" style="display:none">🔔 Notify me</button>
       <button class="btn btn-ghost btn-sm" id="invite">Invite</button>
     <button class="btn btn-ghost btn-sm" id="signout">Sign out</button>
   </header>
@@ -563,6 +567,7 @@ async function loadAll(){
   try{ const uu = await sb.auth.getUser(); MY_ID = (uu.data && uu.data.user) ? uu.data.user.id : null; }catch(e){ MY_ID = null; }
   try{ paintPushBtn(); }catch(e){}
   try{ startRealtime(); }catch(e){}
+  try{ const gb = document.getElementById("getAppBtn"); if(gb) gb.onclick = openGetApp; installBanner(); }catch(e){}
   await Promise.all(tables.map(async t=>{
     const {data,error} = await sb.from(t).select("*");
     if(!error) DATA[t]=data||[];
@@ -1591,6 +1596,89 @@ function stampMealDates(){
     e.textContent = txt + " " + dates[txt];
     if(txt === todayName) e.classList.add("is-today");
   });
+}
+
+/* ---------- Add to Home Screen ----------
+   Apple only allows notifications and the camera once the app is installed,
+   so this is not a nicety — half the product depends on it. */
+function isInstalled(){
+  return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+}
+function isIOSDevice(){
+  const ua = navigator.userAgent || "";
+  return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+const INSTALL_URL = location.origin + location.pathname.replace(/index\.html$/, "") + "install.html";
+
+let DEFERRED_INSTALL = null;
+window.addEventListener("beforeinstallprompt", function(e){
+  e.preventDefault();
+  DEFERRED_INSTALL = e;
+});
+
+async function shareApp(){
+  const data = {
+    title: "Home Base",
+    text: "Add Home Base to your phone — it runs our household.",
+    url: INSTALL_URL
+  };
+  if(navigator.share){
+    try{ await navigator.share(data); return; }catch(e){ return; }
+  }
+  try{
+    await navigator.clipboard.writeText(INSTALL_URL);
+    toast("Link copied — send it to anyone in the household");
+  }catch(e){
+    prompt("Copy this link:", INSTALL_URL);
+  }
+}
+
+function openGetApp(){
+  // Android and desktop Chrome can install for real, right here.
+  if(DEFERRED_INSTALL){
+    DEFERRED_INSTALL.prompt();
+    DEFERRED_INSTALL = null;
+    return;
+  }
+  const ov = el("div","modal-ov","");
+  const card = el("div","modal","");
+  card.appendChild(el("h3", null, "Put Home Base on your phone"));
+  if(isInstalled()){
+    card.appendChild(el("div","sub","You're already running the installed app. Nice."));
+  } else if(isIOSDevice()){
+    card.appendChild(el("div","sub","In <strong>Safari</strong>: tap the <strong>Share</strong> button, then <strong>Add to Home Screen</strong>."));
+    card.appendChild(el("div","modal-lbl","Why it matters"));
+    card.appendChild(el("div","sub","Apple only lets notifications and the barcode scanner work from the installed app — not a browser tab."));
+  } else {
+    card.appendChild(el("div","sub","Open your browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>."));
+  }
+  const row = el("div","modal-row","");
+  const share = el("button","btn btn-gold","Share the link");
+  share.onclick = function(){ ov.remove(); shareApp(); };
+  const close = el("button","btn","Close");
+  close.onclick = function(){ ov.remove(); };
+  row.appendChild(close); row.appendChild(share);
+  card.appendChild(row);
+  ov.appendChild(card);
+  ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+
+function installBanner(){
+  if(isInstalled()) return;
+  if(localStorage.getItem("hb_install_dismissed") === "1") return;
+  if(document.getElementById("installBanner")) return;
+  const b = el("div","install-banner","");
+  b.id = "installBanner";
+  const txt = el("div","ib-text", isIOSDevice()
+    ? "Add Home Base to your Home Screen — notifications and the scanner only work from the installed app."
+    : "Install Home Base for notifications and the barcode scanner.");
+  const go = el("button","btn btn-gold btn-sm","How");
+  go.onclick = openGetApp;
+  const x = el("button","ib-x","✕");
+  x.onclick = function(){ localStorage.setItem("hb_install_dismissed","1"); b.remove(); };
+  b.appendChild(txt); b.appendChild(go); b.appendChild(x);
+  document.body.appendChild(b);
 }
 
 /* ---------- Barcode scanning ----------
