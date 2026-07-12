@@ -113,7 +113,6 @@
     .scan-status{position:absolute;left:0;right:0;bottom:96px;text-align:center;color:#fff;font-weight:700;font-size:15px;padding:0 20px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
     .scan-actions{position:absolute;bottom:26px;left:0;right:0;display:flex;gap:10px;justify-content:center;padding:0 20px}
     .scan-close{min-width:130px;min-height:48px;background:#fff;color:#111;font-weight:800;border-radius:999px;border:0}
-    .scan-manual{min-width:150px;min-height:48px;background:rgba(255,255,255,.18);color:#fff;font-weight:800;border-radius:999px;border:2px solid #fff}
     .modal-ov{position:fixed;inset:0;z-index:9100;background:rgba(17,17,17,.55);display:flex;align-items:center;justify-content:center;padding:20px}
     .modal{background:var(--card);border-radius:16px;padding:20px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
     .modal-lbl{font-size:12px;font-weight:800;color:var(--muted);margin:12px 0 4px}
@@ -1640,6 +1639,45 @@ async function lookupBarcodeName(code){
   return "";
 }
 
+/* We drive the decoder ourselves rather than handing it the <video> and hoping.
+   Frames go: video -> canvas -> luminance -> zxing. The library wants a
+   single-channel luminance buffer, NOT raw RGBA — feeding it RGBA silently
+   decodes nothing, which is what went wrong the first time. */
+let ZXR = null;
+async function zxingReader(){
+  if(ZXR) return ZXR;
+  const zx = await import("https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/+esm");
+  const hints = new Map();
+  hints.set(zx.DecodeHintType.POSSIBLE_FORMATS, [
+    zx.BarcodeFormat.EAN_13, zx.BarcodeFormat.EAN_8, zx.BarcodeFormat.UPC_A,
+    zx.BarcodeFormat.UPC_E, zx.BarcodeFormat.CODE_128, zx.BarcodeFormat.CODE_39,
+    zx.BarcodeFormat.ITF
+  ]);
+  hints.set(zx.DecodeHintType.TRY_HARDER, true);
+  const reader = new zx.MultiFormatReader();
+  reader.setHints(hints);
+  ZXR = { zx: zx, reader: reader };
+  return ZXR;
+}
+function decodeCanvas(zxr, canvas){
+  const w = canvas.width, h = canvas.height;
+  if(!w || !h) return null;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const img = ctx.getImageData(0, 0, w, h);
+  const lum = new Uint8ClampedArray(w * h);
+  const d = img.data;
+  for(let i = 0, j = 0; i < d.length; i += 4, j++){
+    lum[j] = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+  }
+  try{
+    const src = new zxr.zx.RGBLuminanceSource(lum, w, h);
+    const bitmap = new zxr.zx.BinaryBitmap(new zxr.zx.HybridBinarizer(src));
+    return zxr.reader.decode(bitmap).getText();
+  }catch(e){
+    return null;   // no barcode in this frame — normal, just try the next one
+  }
+}
+
 async function openScanner(){
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
     toast("This browser can't reach the camera. On iPhone, add Home Base to your Home Screen, then try again.");
@@ -1655,46 +1693,42 @@ async function openScanner(){
   const box    = el("div","scan-box","");
   const status = el("div","scan-status","Starting the camera…");
   const bar    = el("div","scan-actions","");
-  const manual = el("button","btn scan-manual","Type it instead");
   const done   = el("button","btn scan-close","Done");
-  bar.appendChild(manual);
   bar.appendChild(done);
   ov.appendChild(video); ov.appendChild(box); ov.appendChild(status); ov.appendChild(bar);
   document.body.appendChild(ov);
 
-  let stream = null, stopped = false, controls = null;
+  let stream = null, stopped = false;
   const cleanup = function(){
     stopped = true;
-    try{ if(controls && typeof controls.stop === "function") controls.stop(); }catch(e){}
     if(stream) stream.getTracks().forEach(function(t){ t.stop(); });
     ov.remove();
     SCAN = null;
   };
   done.onclick = cleanup;
-
-  // Always a way through, even if the camera or the decoder lets us down.
-  manual.onclick = function(){
-    const typed = prompt("Type the barcode number (the digits printed under the bars)");
-    if(typed && typed.trim()){
-      cleanup();
-      handleScanCode(typed.trim().replace(/\D/g, ""));
-    }
-  };
-
   SCAN = { cleanup: cleanup };
 
   try{
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false
     });
   }catch(e){
-    status.textContent = "Camera blocked (" + (e.name || "error") + "). Allow camera access for this site, or tap “Type it instead”.";
+    status.textContent = "Camera blocked (" + (e.name || "error") + "). Allow camera access for this site and try again.";
     return;
   }
 
   video.srcObject = stream;
   try{ await video.play(); }catch(e){}
+
+  // Sharper frames help a lot on small barcodes.
+  try{
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(caps.focusMode && caps.focusMode.indexOf("continuous") > -1){
+      await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+    }
+  }catch(e){}
 
   let last = 0, busy = false;
   const onCode = async function(code){
@@ -1706,10 +1740,10 @@ async function openScanner(){
     finally{ busy = false; }
   };
 
-  // Chrome / Android: the browser has a barcode reader built in.
+  // Chrome / Android have a barcode reader built into the browser — use it.
   if("BarcodeDetector" in window){
     try{
-      const det = new BarcodeDetector();   // no format list — an unsupported one throws
+      const det = new BarcodeDetector();
       status.textContent = "Point at the barcode";
       const tick = async function(){
         if(stopped) return;
@@ -1721,21 +1755,56 @@ async function openScanner(){
       };
       tick();
       return;
-    }catch(e){ /* fall through to the library */ }
+    }catch(e){ /* fall through */ }
   }
 
-  // Safari / iOS: no built-in reader, so load one.
+  // Safari / iOS: no built-in reader. Decode the frames ourselves.
   status.textContent = "Loading the scanner…";
+  let zxr;
   try{
-    const zx = await import("https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/+esm");
-    const reader = new zx.BrowserMultiFormatReader();
-    controls = await reader.decodeFromVideoElement(video, function(result){
-      if(result && !stopped) onCode(result.getText());
-    });
-    status.textContent = "Point at the barcode";
+    zxr = await zxingReader();
   }catch(e){
-    status.textContent = "The scanner wouldn't start (" + (e.message || e) + "). Tap “Type it instead”.";
+    status.textContent = "Scanner failed to load (" + (e.message || e) + "). Check your connection.";
+    return;
   }
+  status.textContent = "Point at the barcode";
+
+  const canvas = document.createElement("canvas");
+  const rot = document.createElement("canvas");
+
+  const scan = async function(){
+    if(stopped) return;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if(vw && vh){
+      // Read the band inside the guide box, scaled to something zxing likes.
+      const cw = Math.floor(vw * 0.92), ch = Math.floor(vh * 0.45);
+      const cx = Math.floor((vw - cw) / 2), cy = Math.floor((vh - ch) / 2);
+      const scale = Math.min(1, 1000 / cw);
+      const dw = Math.max(1, Math.floor(cw * scale));
+      const dh = Math.max(1, Math.floor(ch * scale));
+      canvas.width = dw; canvas.height = dh;
+      canvas.getContext("2d", { willReadFrequently: true })
+        .drawImage(video, cx, cy, cw, ch, 0, 0, dw, dh);
+
+      let code = decodeCanvas(zxr, canvas);
+
+      if(!code){
+        // The bars may be running vertically because of how the item is held.
+        rot.width = dh; rot.height = dw;
+        const rctx = rot.getContext("2d", { willReadFrequently: true });
+        rctx.save();
+        rctx.translate(dh / 2, dw / 2);
+        rctx.rotate(Math.PI / 2);
+        rctx.drawImage(canvas, -dw / 2, -dh / 2);
+        rctx.restore();
+        code = decodeCanvas(zxr, rot);
+      }
+
+      if(code) await onCode(code);
+    }
+    if(!stopped) setTimeout(scan, 120);
+  };
+  scan();
 }
 
 /* Manual entry and the camera both end up here. */
