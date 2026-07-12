@@ -29,7 +29,8 @@
   .btn-ghost{background:transparent;color:var(--teal);border:2px solid var(--teal);line-height:48px}
   .btn + .btn{margin-top:10px}
   .qr{display:flex;flex-direction:column;align-items:center;gap:10px}
-  .qr canvas{border-radius:12px;border:1px solid var(--line);background:#fff;padding:8px}
+  .qr #qr{border-radius:12px;border:1px solid var(--line);background:#fff;padding:10px;line-height:0}
+  .qr #qr img,.qr #qr canvas{display:block}
   .link{word-break:break-all;font-size:13px;color:var(--muted);text-align:center}
   .note{background:#fdf6e3;border:1px solid var(--gold);border-radius:12px;padding:14px 16px;font-size:14px;margin-top:16px}
   .hide{display:none}
@@ -52,7 +53,7 @@
 
   <div class="card">
     <div class="qr">
-      <canvas id="qr" width="200" height="200"></canvas>
+      <div id="qr"></div>
       <div class="link" id="url"></div>
     </div>
   </div>
@@ -97,7 +98,7 @@
   </footer>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
   var APP = location.origin + location.pathname.replace(/install\.html$/, "");
   var SHARE = location.origin + location.pathname;   // this install page
@@ -106,10 +107,16 @@
 
   // QR points at these instructions, so whoever scans it gets the steps too.
   if (window.QRCode) {
-    QRCode.toCanvas(document.getElementById("qr"), SHARE, {
-      width: 200, margin: 1,
-      color: { dark: "#1f2933", light: "#ffffff" }
+    new QRCode(document.getElementById("qr"), {
+      text: SHARE,
+      width: 200,
+      height: 200,
+      colorDark: "#1f2933",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.M
     });
+  } else {
+    document.getElementById("qr").textContent = "";
   }
 
   var ua = navigator.userAgent || "";
