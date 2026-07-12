@@ -2095,6 +2095,9 @@ function decorateTaskRows(){
 function parseQuickAdd(raw){
   let text = String(raw || "").trim();
   if(!text) return null;
+  // people type "add a task for Mourad for Sunday" — drop the polite scaffolding
+  text = text.replace(/^\s*(?:please\s+)?add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|item)?\s*(?:to|for)?\s*/i, "").trim();
+  if(!text) return null;
   const out = { table: "weekly_tasks", fields: {} };
   let lower = text.toLowerCase();
 
@@ -2137,8 +2140,9 @@ function parseQuickAdd(raw){
     if(dow){
       const want = DAYS.indexOf(dow[1].charAt(0).toUpperCase() + dow[1].slice(1));
       const d = new Date(); d.setHours(0,0,0,0);
-      let delta = (want - d.getDay() + 7) % 7;
-      if(delta === 0) delta = 7;
+      // The next time that day comes round, counting today. Saying "Sunday" on a
+      // Sunday means today — not a week away.
+      const delta = (want - d.getDay() + 7) % 7;
       d.setDate(d.getDate() + delta);
       due = isoDate(d);
       text = text.replace(new RegExp("\\b" + dow[1] + "\\b", "i"), "").trim();
@@ -2146,9 +2150,9 @@ function parseQuickAdd(raw){
   }
   if(due) out.fields.due_date = due;
 
-  text = text.replace(/\s{2,}/g, " ").replace(/^[\s,-]+|[\s,-]+$/g, "").trim();
+  text = text.replace(/\s{2,}/g, " ").replace(/\s+for\s*$/i, "").replace(/^[\s,-]+|[\s,-]+$/g, "").trim();
   if(!text) return null;
-  out.fields.task = text;
+  out.fields.task = text.charAt(0).toUpperCase() + text.slice(1);
   return out;
 }
 
@@ -2172,6 +2176,7 @@ async function quickAdd(raw){
   if(parsed.table === "recurring_tasks") bits.push("every " + parsed.fields.day);
   if(parsed.fields.due_date) bits.push(prettyDate(parsed.fields.due_date));
   if(parsed.fields.assignee) bits.push("for " + memberName(parsed.fields.assignee));
+  if(parsed.fields.week_start && parsed.fields.week_start !== thisWeekStart()) bits.push("next week");
   toast("Added" + (bits.length ? " — " + bits.join(", ") : ""));
   return true;
 }
@@ -2203,7 +2208,7 @@ function startDictation(input, btn){
 }
 
 function quickAddBar(){
-  const host = document.querySelector("#tasksContent");
+  const host = document.querySelector("#weekContent") || document.querySelector("#tasksContent");
   if(!host || !host.parentNode) return;
   if(document.getElementById("quickAdd")) return;
   const bar = el("div","quick-add","");
