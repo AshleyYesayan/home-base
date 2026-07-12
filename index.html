@@ -978,7 +978,7 @@ function renderTasks(){
   if(doneToday.length){
     const dc=el("div","card"); dc.appendChild(el("h3",null,`✅ Done <span class="pill good">${doneToday.length}</span>`));
     doneToday.forEach(t=>{
-      const row=el("div","row");
+      const row=el("div","row"); row.dataset.table="recurring_tasks"; row.dataset.id=t.id;
       const chk=el("div","check done","✓"); chk.title="Undo"; chk.onclick=()=>toggleTask(t);
       const g=el("div","grow"); g.innerHTML=`<div class="title done-text">${esc(t.task)}</div><div class="sub">${t.day}</div>`;
       row.appendChild(chk); row.appendChild(g); dc.appendChild(row);
@@ -1826,10 +1826,11 @@ function startTaskEdit(row, table, id, title){
   if(row.querySelector(".edit-in")) return;
   const rec = (DATA[table] || []).find(function(x){ return x.id === id; });
   if(!rec) return;
+  const field = titleField(table);
 
   const input = document.createElement("input");
   input.className = "edit-in";
-  input.value = rec.task || "";
+  input.value = rec[field] || "";
   title.style.display = "none";
   title.parentNode.insertBefore(input, title);
   input.focus();
@@ -1842,14 +1843,16 @@ function startTaskEdit(row, table, id, title){
     const val = input.value.trim();
     input.remove();
     title.style.display = "";
-    if(!save || !val || val === rec.task) return;
+    if(!save || !val || val === rec[field]) return;
 
-    const wasTask = rec.task;
-    rec.task = val;
+    const was = rec[field];
+    rec[field] = val;
     render();
-    const { error } = await sb.from(table).update({ task: val }).eq("id", id);
+    const patch = {};
+    patch[field] = val;
+    const { error } = await sb.from(table).update(patch).eq("id", id);
     if(error){
-      rec.task = wasTask;
+      rec[field] = was;
       render();
       toast("Couldn't save — " + error.message);
       return;
