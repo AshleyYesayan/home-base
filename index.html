@@ -2591,7 +2591,7 @@ const TOUR = [
 
   { tab:"pantry", sub:/supplies/i, sel:null,
     title:"Par levels do the thinking",
-    body:"Set how many of something you like to keep. When you drop below it, it lands on the restock list on its own. Weed also raises a <b>“go to the weed store”</b> task, because you can't buy that online." },
+    body:"Set how many of something you like to keep. When you drop below it, it lands on the restock list on its own. Items you can't buy online can also raise their own errand — give the item a restock task and it appears on your list when you run short." },
 
   { tab:"meal", sub:/meals/i, sel:null,
     title:"The week's meals",
@@ -2782,7 +2782,7 @@ function paintHelp(card, ov){
       ["How does the barcode scanner work?",
        "Tap <b>📷 Scan a barcode</b> on Stock. If it's an item you already track, the count goes up and the scanner stays open for the next one. If it's new, it looks up the name — and if it can't find it (household goods often aren't in the free product database), you name it once and it remembers that barcode forever."],
       ["What are par levels?",
-       "The number of something you like to keep on hand. Drop below it and the item lands on your restock list automatically. Weed additionally raises a <b>“Go to the weed store”</b> task, since you can't buy that online — it only ever creates one, and only while you're short."],
+       "The number of something you like to keep on hand. Drop below it and the item lands on your restock list automatically. If an item has a <b>restock task</b> set, it also raises that errand on your task list — for the things you have to go out and buy in person. It only ever creates one, and only while you're short."],
       ["Can I fix a typo without deleting the task?",
        "Yes — <b>tap the text</b> of any task and type over it. Enter saves, Esc cancels. Works everywhere on the Tasks tab, including punted items and Upkeep."],
       ["Does Mourad see my changes straight away?",
@@ -2958,7 +2958,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 22";
+const BUILD_ID = "build 23";
 let SCAN = null;
 let BARCODE_COL = null;
 
