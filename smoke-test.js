@@ -29,7 +29,7 @@ async function smokeTest() {
      The original seed() shipped Ashley's real routine (medication reminders and
      all) to every new household. Never let that back in. */
   const src = await (await fetch(location.pathname + "?cb=" + Date.now(), { cache: "no-store" })).text();
-  const leaks = ["Wegovy", "orchid", "birdseed", "Dispensary", "front and side porch"]
+  const leaks = ["Wegovy", "orchid", "birdseed", "Dispensary", "weed", "cannabis", "front and side porch"]
     .filter((w) => new RegExp(w, "i").test(src));
   ok("no personal seed data in bundle", leaks.length === 0, leaks.join(", "));
 
