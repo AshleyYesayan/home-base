@@ -2859,7 +2859,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 14";
+const BUILD_ID = "build 15";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -3331,6 +3331,10 @@ function openTagPicker(r){
   document.body.appendChild(ov);
 }
 
+function cardLabel(tEl){
+  const n = tEl.childNodes[0];
+  return ((n && n.nodeType === 3 ? n.textContent : tEl.textContent) || "").trim();
+}
 function recipeFilterBar(){
   const pane = document.getElementById("pane-recipes");
   if(!pane) return;
@@ -3360,7 +3364,7 @@ function recipeFilterBar(){
   (DATA.recipes || []).forEach(function(r){
     pane.querySelectorAll(".card").forEach(function(c){
       const tEl = c.querySelector(".title");
-      if(!tEl || tEl.textContent.trim() !== (r.title || "").trim()) return;
+      if(!tEl || cardLabel(tEl) !== (r.title || "").trim()) return;
       c.dataset.rid = r.id;
       if(!c.querySelector(".tag-btn")){
         const row = c.querySelector(".row");
@@ -3380,6 +3384,7 @@ function applyRecipeFilter(){
   const q = RQ.trim().toLowerCase();
   let shown = 0;
   pane.querySelectorAll(".card").forEach(function(c){
+    if(!c.querySelector(".title")) return;
     const r = (DATA.recipes || []).filter(function(x){ return String(x.id) === c.dataset.rid; })[0];
     const tags = r ? (r.tags || []) : [];
     const hay = (c.textContent + " " + tags.join(" ")).toLowerCase();
