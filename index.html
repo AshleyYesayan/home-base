@@ -153,7 +153,21 @@
     .row.in-progress .check{box-shadow:0 0 0 3px var(--gold);border-color:var(--gold)}
     .row.in-progress{background:#fffaf0}
     .row.in-progress .title::after{content:" · in progress";font-size:11px;font-weight:800;color:#b8860b;letter-spacing:.02em}
-    .legend{max-width:440px;max-height:80vh;overflow-y:auto}
+    .tour-ov{position:fixed;inset:0;z-index:9500;pointer-events:auto}
+    .tour-hole{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(17,17,17,.62), 0 0 0 3px var(--gold);transition:all .22s ease;pointer-events:none}
+    .tour-card{position:fixed;z-index:9600;background:var(--card);border-radius:16px;padding:16px 18px;box-shadow:0 18px 50px rgba(0,0,0,.34);max-width:340px}
+    .tour-card h3{margin:2px 0 6px;font-size:17px}
+    .tour-step{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    .tour-body{font-size:14px;line-height:1.5;color:var(--ink)}
+    .tour-row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+    .faq{margin-top:6px}
+    .faq-item{border-bottom:1px solid var(--line)}
+    .faq-item summary{cursor:pointer;padding:11px 0;font-weight:700;font-size:14px;list-style:none}
+    .faq-item summary::-webkit-details-marker{display:none}
+    .faq-item summary::before{content:"▸ ";color:var(--teal);font-weight:800}
+    .faq-item[open] summary::before{content:"▾ "}
+    .faq-a{font-size:14px;line-height:1.55;color:var(--ink);padding:0 0 12px 14px}
+    .legend{max-width:460px;max-height:82vh;overflow-y:auto}
     .legend-list{margin-top:8px}
     .legend-row{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
     .lg-icon{flex:0 0 42px;text-align:center;font-size:17px;padding-top:1px}
@@ -253,7 +267,7 @@
     <div class="brand"><span class="dot">🏡</span> Home Base</div>
     <div class="spacer"></div>
     <span class="whoami" id="whoami"></span>
-    <button class="btn btn-ghost btn-sm" id="legendBtn" title="What do the symbols mean?">❓ Key</button>
+    <button class="btn btn-ghost btn-sm" id="helpBtn" title="Tour, key and questions">❓ Help</button>
       <button class="btn btn-ghost btn-sm" id="getAppBtn">📲 Get the app</button>
       <button class="btn btn-ghost btn-sm" id="pushBtn" style="display:none">🔔 Notify me</button>
       <button class="btn btn-ghost btn-sm" id="invite">Invite</button>
@@ -626,7 +640,8 @@ async function loadAll(){
   try{ paintPushBtn(); }catch(e){}
   try{ startRealtime(); }catch(e){}
   try{ const gb = document.getElementById("getAppBtn"); if(gb) gb.onclick = openGetApp; installBanner(); }catch(e){}
-  try{ const lb = document.getElementById("legendBtn"); if(lb) lb.onclick = openLegend; }catch(e){}
+  try{ const lb = document.getElementById("helpBtn"); if(lb) lb.onclick = function(){ openHelp("key"); }; }catch(e){}
+  try{ maybeAutoTour(); }catch(e){}
   await Promise.all(tables.map(async t=>{
     const {data,error} = await sb.from(t).select("*");
     if(!error) DATA[t]=data||[];
@@ -2360,49 +2375,280 @@ function wireInProgress(){
 }
 
 /* ---------- Legend ---------- */
-function openLegend(){
-  const ov = el("div","modal-ov","");
+function goTab(v){
+  const b = document.querySelector('[data-v="' + v + '"]');
+  if(b) b.click();
+}
+function goSub(match){
+  const b = [...document.querySelectorAll("nav.subtabs button")].find(function(x){ return match.test(x.textContent); });
+  if(b) b.click();
+}
+
+/* ================= GUIDED TOUR ================= */
+const TOUR = [
+  { tab:"tasks", sub:/this week/i, sel:null,
+    title:"Welcome to Home Base",
+    body:"This runs your household — tasks, the weekly routine, groceries and meals. It takes about a minute to show you round. You can stop any time." },
+
+  { tab:"tasks", sub:/this week/i, sel:"#quickAdd",
+    title:"Add anything, in plain English",
+    body:"Type <b>“clean the grill Sunday for Mourad”</b> and it works out the day and the person. It understands <i>every Sunday</i>, <i>tomorrow</i>, <i>next week</i>, any weekday, and <i>for [name]</i>. Tap 🎤 to say it instead." },
+
+  { tab:"tasks", sub:/this week/i, sel:".week-band",
+    title:"The week runs Monday to Sunday",
+    body:"It starts fresh every <b>Monday</b> — your routine unticks itself and the new week begins." },
+
+  { tab:"tasks", sub:/this week/i, sel:".routine",
+    title:"Your routine, folded up",
+    body:"Repeating chores are collapsed so they don't bury you. Tap to open. This is the <b>template</b> — it refills every week on its own." },
+
+  { tab:"tasks", sub:/this week/i, sel:".check",
+    title:"Tap to finish. Hold to start.",
+    body:"<b>Tap</b> the box to tick something off.<br><b>Press and hold</b> it to mark the job <b>in progress</b> — started, not finished. It gets a gold ring, so Mourad can see you've already begun. Hold again to clear it." },
+
+  { tab:"tasks", sub:/this week/i, sel:".punt-btn",
+    title:"🏈 Punt it to next week",
+    body:"Couldn't get to it? Punt it. It leaves this week and reappears in the <b>same slot next week</b> — punt a Saturday job and it turns up next Saturday. It quietly counts how often you punt something." },
+
+  { tab:"tasks", sub:/this week/i, sel:".who",
+    title:"Who's on it",
+    body:"Initials show who's assigned. Tap to change, and you can pick <b>more than one person</b> — like the Wegovy shot. A shared task shows on <b>both</b> your lists, so it never falls through." },
+
+  { tab:"tasks", sub:/this week/i, sel:".daybtn",
+    title:"Which day",
+    body:"Move a task to another day. Careful on a <b>routine</b> item — that changes the template, so it moves <i>every</i> week from then on." },
+
+  { tab:"tasks", sub:/this week/i, sel:".filter-bar",
+    title:"Just my stuff",
+    body:"<b>Mine</b> shows only what's on you — including anything you share with Mourad. <b>Show done</b> brings back what you've already finished." },
+
+  { tab:"pantry", sub:/supplies/i, sel:".scan-btn",
+    title:"Scan the barcode",
+    body:"Point it at a barcode. If it's something you already track, the count goes up. If it's new, name it once and it remembers forever." },
+
+  { tab:"pantry", sub:/supplies/i, sel:null,
+    title:"Par levels do the thinking",
+    body:"Set how many of something you like to keep. When you drop below it, it lands on the restock list on its own. Weed also raises a <b>“go to the weed store”</b> task, because you can't buy that online." },
+
+  { tab:"meal", sub:/meals/i, sel:null,
+    title:"The week's meals",
+    body:"Plan Sunday to Saturday, save it, and build up a rotation of dinners you actually make." },
+
+  { tab:"today", sub:null, sel:"#pushBtn",
+    title:"Turn on notifications",
+    body:"<b>Friday 7am</b> — here's your weekend.<br><b>Sunday 7pm</b> — here's Monday to Friday.<br>On an iPhone these only work once Home Base is on your <b>Home Screen</b>." },
+
+  { tab:"today", sub:null, sel:"#helpBtn",
+    title:"That's the tour",
+    body:"Everything's in here — the symbols, the questions, and this tour again whenever you want it." }
+];
+
+let TOUR_I = 0;
+function tourEls(){
+  return {
+    ov: document.getElementById("tourOv"),
+    hole: document.getElementById("tourHole"),
+    card: document.getElementById("tourCard")
+  };
+}
+function endTour(){
+  const e = tourEls();
+  if(e.ov) e.ov.remove();
+  localStorage.setItem("hb_tour_done", "1");
+}
+function startTour(){
+  const old = document.getElementById("tourOv");
+  if(old) old.remove();
+  TOUR_I = 0;
+  const ov = el("div","tour-ov","");
+  ov.id = "tourOv";
+  const hole = el("div","tour-hole","");
+  hole.id = "tourHole";
+  const card = el("div","tour-card","");
+  card.id = "tourCard";
+  ov.appendChild(hole);
+  ov.appendChild(card);
+  document.body.appendChild(ov);
+  paintTourStep();
+}
+function paintTourStep(){
+  const step = TOUR[TOUR_I];
+  const e = tourEls();
+  if(!step || !e.ov){ endTour(); return; }
+
+  if(step.tab) goTab(step.tab);
+  if(step.sub) setTimeout(function(){ goSub(step.sub); }, 60);
+
+  setTimeout(function(){
+    const target = step.sel ? document.querySelector(step.sel) : null;
+    const hole = e.hole, card = e.card;
+
+    if(target){
+      target.scrollIntoView({ block:"center", behavior:"smooth" });
+      setTimeout(function(){
+        const r = target.getBoundingClientRect();
+        hole.style.display = "block";
+        hole.style.top = (r.top - 6) + "px";
+        hole.style.left = (r.left - 6) + "px";
+        hole.style.width = (r.width + 12) + "px";
+        hole.style.height = (r.height + 12) + "px";
+        placeCard(card, r);
+      }, 260);
+    } else {
+      hole.style.display = "none";
+      placeCard(card, null);
+    }
+
+    card.innerHTML = "";
+    card.appendChild(el("div","tour-step", (TOUR_I + 1) + " of " + TOUR.length));
+    card.appendChild(el("h3", null, step.title));
+    card.appendChild(el("div","tour-body", step.body));
+    const row = el("div","tour-row","");
+    const skip = el("button","btn btn-sm","Skip");
+    skip.onclick = endTour;
+    const next = el("button","btn btn-gold btn-sm", TOUR_I === TOUR.length - 1 ? "Done" : "Next");
+    next.onclick = function(){ TOUR_I++; paintTourStep(); };
+    row.appendChild(skip);
+    row.appendChild(next);
+    card.appendChild(row);
+  }, 140);
+}
+function placeCard(card, r){
+  card.style.display = "block";
+  if(!r){
+    card.style.top = "50%";
+    card.style.left = "50%";
+    card.style.transform = "translate(-50%,-50%)";
+    return;
+  }
+  card.style.transform = "none";
+  const below = r.bottom + 14;
+  const fits = below + 210 < window.innerHeight;
+  card.style.top = (fits ? below : Math.max(12, r.top - 224)) + "px";
+  const w = Math.min(340, window.innerWidth - 24);
+  let left = r.left + r.width / 2 - w / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - w - 12));
+  card.style.left = left + "px";
+  card.style.width = w + "px";
+}
+
+/* ================= HELP: Tour · Key · Questions ================= */
+let HELP_TAB = "key";
+function openHelp(tab){
+  HELP_TAB = tab || "key";
+  const old = document.querySelector(".modal-ov.help");
+  if(old) old.remove();
+  const ov = el("div","modal-ov help","");
   const card = el("div","modal legend","");
-  card.appendChild(el("h3", null, "How Home Base works"));
-
-  const rows = [
-    ["<span class='lg-box'></span>", "<b>Tap the box</b> to tick something off."],
-    ["<span class='lg-box ip'></span>", "<b>Press and hold the box</b> to mark it <b>in progress</b> — started, not finished. It gets a ring, like organising the pantry over a weekend. Hold again to clear it."],
-    ["🏈", "<b>Punt</b> — push it to next week. It leaves this week and lands in the same slot next week. Punt a Saturday task and it turns up next Saturday."],
-    ["💬", "<b>Notes</b> — leave a note on a task. \"Already grabbed this.\" Both of you see it."],
-    ["<span class='lg-chip'>AM</span>", "<b>Who's on it.</b> Initials of whoever it's assigned to. Tap to change. Two initials on a split chip means it's on <b>both</b> your lists — like the Wegovy shot."],
-    ["🔄", "<b>Take turns</b> — the chore swaps between you every time it's completed. Off by default; switch it on per chore."],
-    ["<span class='lg-chip'>Sun</span>", "<b>Which day.</b> Tap to move a task to another day. On a <i>routine</i> task this changes the template — it moves every week."],
-    ["<span class='lg-due'>Fri 7/17</span>", "<b>Due date.</b> Turns <b class='lg-red'>red</b> when it's overdue."],
-    ["▸", "<b>Routine</b> — your repeating list, folded up. Tap to open. It refills automatically every Monday."],
-    ["📷", "<b>Scan a barcode</b> on the Stock tab. Known item counts up; a new one asks you to name it once, then remembers."],
-    ["🔔", "<b>Notify me</b> — turns on notifications. On iPhone this only works once Home Base is on your Home Screen."]
-  ];
-  const list = el("div","legend-list","");
-  rows.forEach(function(r){
-    const item = el("div","legend-row","");
-    item.appendChild(el("div","lg-icon", r[0]));
-    item.appendChild(el("div","lg-text", r[1]));
-    list.appendChild(item);
-  });
-  card.appendChild(list);
-
-  card.appendChild(el("div","modal-lbl","The week"));
-  card.appendChild(el("div","sub","Runs <b>Monday to Sunday</b> and starts fresh every Monday, when your routine unticks itself. <b>This week</b> holds one-offs you can punt. <b>Recurring</b> is the template that repeats — edit it there and it changes every week."));
-
-  card.appendChild(el("div","modal-lbl","Digests"));
-  card.appendChild(el("div","sub","<b>Friday 7am</b> — what's on for the weekend. <b>Sunday 7pm</b> — what's ahead Monday to Friday."));
-
-  const row = el("div","modal-row","");
-  const close = el("button","btn btn-gold","Got it");
-  close.onclick = function(){ ov.remove(); };
-  row.appendChild(close);
-  card.appendChild(row);
-
   ov.appendChild(card);
   ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
   document.body.appendChild(ov);
+  paintHelp(card, ov);
 }
+function paintHelp(card, ov){
+  card.innerHTML = "";
+  card.appendChild(el("h3", null, "How Home Base works"));
+
+  const tabs = el("div","filter-bar","");
+  [["key","Key"],["questions","Questions"],["tour","Tour"]].forEach(function(p){
+    const b = el("button","chip-toggle" + (HELP_TAB === p[0] ? " on" : ""), p[1]);
+    b.onclick = function(){ HELP_TAB = p[0]; paintHelp(card, ov); };
+    tabs.appendChild(b);
+  });
+  card.appendChild(tabs);
+
+  if(HELP_TAB === "key"){
+    const rows = [
+      ["<span class='lg-box'></span>", "<b>Tap the box</b> to tick something off."],
+      ["<span class='lg-box ip'></span>", "<b>Press and hold the box</b> to mark it <b>in progress</b> — started, not finished. Hold again to clear."],
+      ["🏈", "<b>Punt</b> — push it to next week, into the same slot. Punt a Saturday task and it lands next Saturday."],
+      ["💬", "<b>Notes</b> — leave a note on a task. Both of you see it."],
+      ["<span class='lg-chip'>AM</span>", "<b>Who's on it.</b> Tap to change. A split chip means it's on <b>both</b> your lists."],
+      ["🔄", "<b>Take turns</b> — the chore swaps owner each time it's done."],
+      ["<span class='lg-chip'>Sun</span>", "<b>Which day.</b> On a <i>routine</i> task this changes the template — every week."],
+      ["<span class='lg-due'>Fri 7/17</span>", "<b>Due date.</b> Turns <b class='lg-red'>red</b> when overdue."],
+      ["▸", "<b>Routine</b> — your repeating list, folded up. Refills every Monday."],
+      ["📷", "<b>Scan a barcode</b> on Stock. Known item counts up; a new one you name once."],
+      ["🔔", "<b>Notify me</b> — notifications. iPhone: Home Screen only."]
+    ];
+    const list = el("div","legend-list","");
+    rows.forEach(function(r){
+      const item = el("div","legend-row","");
+      item.appendChild(el("div","lg-icon", r[0]));
+      item.appendChild(el("div","lg-text", r[1]));
+      list.appendChild(item);
+    });
+    card.appendChild(list);
+  }
+
+  if(HELP_TAB === "questions"){
+    const qs = [
+      ["When does the week change over?",
+       "The week runs <b>Monday to Sunday</b>. Every Monday it starts fresh: your recurring chores untick themselves and the new week begins. Sunday is the <i>last</i> day of the week, not the first."],
+      ["What's the difference between This week and Recurring?",
+       "<b>Recurring</b> is the template — the chores that repeat every week. Edit it there and it changes forever.<br><b>This week</b> is what's actually on right now: the routine filled in automatically, plus any one-offs you've added. Only one-offs can be punted."],
+      ["How do I mark something as started but not finished?",
+       "<b>Press and hold</b> the checkbox. It gets a gold ring and the row goes warm — like leaving the pantry half-organised. Hold again to clear it. Mourad sees the ring too, so he won't start the same job."],
+      ["What does the football do?",
+       "🏈 <b>Punts</b> the task to next week. It disappears from this week and reappears in the same slot — a Saturday task lands next Saturday. It shows up under <b>🏈 Next week</b>, with a <b>Bring back</b> button if you change your mind. It also counts how many times you've punted the same thing."],
+      ["Can a task be assigned to both of us?",
+       "Yes. Tap the initials chip and pick more than one person. The Wegovy shot is on both of you. A shared task appears on <b>both</b> your <b>Mine</b> lists and both of you get the digest for it — it can't fall through the gap."],
+      ["What does Take turns do?",
+       "🔄 The chore swaps owner every time it's completed. Ashley does it this week, Mourad next. It's off by default and set per chore — best for genuinely alternating jobs like the bins, not for things one of you always does."],
+      ["How do I move a chore from Sunday to Saturday?",
+       "Tap the day chip. But note: on a <b>routine</b> chore that changes the <b>template</b>, so it moves every week from then on. There's no way yet to move a routine chore for one week only — tell me if you want that."],
+      ["When do the digests arrive?",
+       "<b>Friday 7am</b> — what's on for the weekend.<br><b>Sunday 7pm</b> — what's ahead Monday to Friday.<br>They only ever list what's <i>left</i>, never what you've finished. Nothing arrives until you tap <b>🔔 Notify me</b>."],
+      ["Why aren't notifications working on my phone?",
+       "Apple only delivers notifications to web apps installed on the <b>Home Screen</b>. In a Safari tab they're blocked. Open the app, tap <b>📲 Get the app</b>, and follow the steps — then tap <b>🔔 Notify me</b>."],
+      ["How does the barcode scanner work?",
+       "Tap <b>📷 Scan a barcode</b> on Stock. If it's an item you already track, the count goes up and the scanner stays open for the next one. If it's new, it looks up the name — and if it can't find it (household goods often aren't in the free product database), you name it once and it remembers that barcode forever."],
+      ["What are par levels?",
+       "The number of something you like to keep on hand. Drop below it and the item lands on your restock list automatically. Weed additionally raises a <b>“Go to the weed store”</b> task, since you can't buy that online — it only ever creates one, and only while you're short."],
+      ["Can I fix a typo without deleting the task?",
+       "Yes — <b>tap the text</b> of any task and type over it. Enter saves, Esc cancels. Works everywhere on the Tasks tab, including punted items and Upkeep."],
+      ["Does Mourad see my changes straight away?",
+       "Yes. Everything syncs live between your phones — usually within a couple of seconds, with no refresh. If you're mid-typing it waits until you stop."],
+      ["How do I share this with someone?",
+       "Tap <b>📲 Get the app</b> and hit <b>Share the link</b>. They install it the same way, sign in, and you'll all see the same household."]
+    ];
+    const list = el("div","faq","");
+    qs.forEach(function(q){
+      const d = document.createElement("details");
+      d.className = "faq-item";
+      const sum = document.createElement("summary");
+      sum.textContent = q[0];
+      d.appendChild(sum);
+      d.appendChild(el("div","faq-a", q[1]));
+      list.appendChild(d);
+    });
+    card.appendChild(list);
+  }
+
+  if(HELP_TAB === "tour"){
+    card.appendChild(el("div","sub","A one-minute walk through the app. You can stop at any point."));
+    const go = el("button","btn btn-gold","Start the tour");
+    go.onclick = function(){ ov.remove(); startTour(); };
+    card.appendChild(go);
+  }
+
+  const row = el("div","modal-row","");
+  const close = el("button","btn","Close");
+  close.onclick = function(){ ov.remove(); };
+  row.appendChild(close);
+  card.appendChild(row);
+}
+
+/* first visit: offer the tour once */
+function maybeAutoTour(){
+  if(localStorage.getItem("hb_tour_done") === "1") return;
+  setTimeout(function(){
+    if(document.getElementById("tourOv")) return;
+    startTour();
+  }, 1400);
+}
+
+/* ---------- Add to Home Screen ----------
 
 /* ---------- Add to Home Screen ----------
    Apple only allows notifications and the camera once the app is installed,
