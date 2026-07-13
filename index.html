@@ -2944,7 +2944,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 19";
+const BUILD_ID = "build 20";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -3359,12 +3359,34 @@ function coreOf(line){
     .replace(/\s+/g, " ")
     .trim();
 }
+/* words that describe a staple without changing what it is */
+const STAPLE_QUALIFIERS = ["kosher","sea","table","fine","flaky","coarse","black","freshly","ground",
+  "extra","virgin","cold","pressed","granulated","plain","all","purpose","whole","good","quality",
+  "of","or","more","for","serving","taste","to","a","the","some","best","pure","unbleached",
+  "dried","grated","shredded","crushed","toasted","raw","light","dark"];
+
+function stapleKey(str){
+  return (str || "")
+    .split(/\s+/)
+    .filter(function(w){ return w && STAPLE_QUALIFIERS.indexOf(w) === -1; })
+    .join(" ")
+    .trim();
+}
+
+/* Only cancel an ingredient when the ingredient IS a staple we stock — not merely
+   when it contains a staple's name. Stocking "Pepper" must not cancel "red-pepper
+   flakes", so we compare on equality after stripping descriptive words. */
 function pantryHas(core){
   if(!core) return false;
-  return (DATA.pantry_items || []).some(function(p){
-    const n = (p.name || "").toLowerCase().trim();
-    if(!n || n.length < 4) return false;
-    return (core.indexOf(n) > -1 || n.indexOf(core) > -1) && (p.count || 0) > 0;
+  const parts = core.split(/\s+and\s+/).filter(Boolean);
+  if(!parts.length) return false;
+  return parts.every(function(part){
+    const k = stapleKey(part);
+    if(!k) return false;
+    return (DATA.pantry_items || []).some(function(p){
+      const n = (p.name || "").toLowerCase().trim();
+      return n && (p.count || 0) > 0 && n === k;
+    });
   });
 }
 
