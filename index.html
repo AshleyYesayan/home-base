@@ -171,14 +171,17 @@
     .modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
     .scan-torch{min-width:56px;min-height:48px;background:rgba(255,255,255,.18);color:#fff;border:2px solid #fff;border-radius:999px;font-size:18px}
     .scan-torch.on{background:var(--gold);color:#111;border-color:var(--gold)}
-    .mealday{display:grid;grid-template-columns:1fr;gap:8px;padding:12px 0;align-items:stretch}
-    .mealday .d{font-weight:800;color:var(--teal-d);font-size:13px;white-space:nowrap;letter-spacing:.3px}
-    .mealday > div:not(.d){width:100%}
     .mealday > div:not(.d) > div{display:flex;align-items:flex-start;gap:6px;width:100%}
-    .mealday textarea{flex:1 1 auto;min-width:0;width:100%;resize:none;overflow:hidden;font-family:inherit;font-size:14px;line-height:1.35;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);min-height:42px}
+    .mealday textarea{flex:1 1 auto;min-width:0;width:100%;resize:none;overflow:hidden;font-family:inherit;font-size:14px;line-height:1.35;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);min-height:42px;max-height:110px}
     .mealday .icon-btn{flex:0 0 auto;width:40px;height:42px}
     .mealday select{width:100%;margin-top:6px}
     .night-off textarea{opacity:.62;font-style:italic}
+    /* on a phone the day gets its own line so the meal field can use the full width */
+    @media(max-width:620px){
+      .mealday{grid-template-columns:1fr !important;gap:6px !important;padding:12px 0 !important}
+      .mealday .d{font-size:13px;white-space:nowrap}
+      .mealday .icon-btn{width:38px;height:42px}
+    }
     .qty-pop{position:fixed;z-index:9400;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.24);padding:12px}
     .qty-head{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
     .qty-row{display:flex;align-items:center;justify-content:center;gap:14px}
@@ -2941,7 +2944,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 18";
+const BUILD_ID = "build 19";
 let SCAN = null;
 let BARCODE_COL = null;
 
