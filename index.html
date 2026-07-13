@@ -276,7 +276,7 @@
       </div>
       <div class="pane" id="pane-recurring">
         <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
-        <p class="muted small" style="margin:0 0 14px">This is the <strong>template</strong> — it repeats every week. For a one-off like an ATM run, add it under <strong>This week</strong> instead, where you can punt it. Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it auto-resets each Sunday).</p>
+        <p class="muted small" style="margin:0 0 14px">This is the <strong>template</strong> — it repeats every week. For a one-off like an ATM run, add it under <strong>This week</strong> instead, where you can punt it. Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it starts fresh every Monday).</p>
         <div id="tasksContent"></div>
       </div>
       <div class="pane" id="pane-handyman">
@@ -785,7 +785,7 @@ function renderToday(){
   const _dn = _tt.filter(t=>t.done_date===todayStr()).length;
   const titles = {
       review: "🗓️ Week in review",
-    tasks:    "✅ "+tn+"'s tasks" + (_tt.length ? `  ${_dn}/${_tt.length}` : ""),
+    tasks:    "✅ "+tn+"'s tasks" + (_tt.length ? `  ${_dn} of ${_tt.length} done` : ""),
     week:     "📌 This week",
     upkeep:   "🔔 Upkeep due soon",
     restock:  "🛒 Restock list",
@@ -1778,7 +1778,16 @@ async function refreshTasks(){
   if(!confirm("Reset every day's task list to your saved template? This clears current tasks and checkmarks.")) return;
   await applyTemplate(); render(); toast("Tasks refreshed from your template.");
 }
-function weekKey(){ const d=new Date(todayStr()+"T00:00:00"); d.setDate(d.getDate()-d.getDay()); return d.toISOString().slice(0,10); }
+function weekKey(){
+  // Monday-anchored: the week runs Mon -> Sun, so it turns over on Monday.
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  const dow = d.getDay();               // 0 = Sunday
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  return d.getFullYear() + "-" +
+         String(d.getMonth() + 1).padStart(2, "0") + "-" +
+         String(d.getDate()).padStart(2, "0");
+}
 async function autoWeeklyRefresh(){
   if(new Date().getDay()!==0) return;              // Sundays only
   if(DATA.task_templates.length===0 || !CURRENT_HH) return;
@@ -1788,7 +1797,7 @@ async function autoWeeklyRefresh(){
     if(data && data.tasks_week===wk) return;       // already reset this week by anyone in the household
     await sb.from("households").update({tasks_week:wk}).eq("id",CURRENT_HH); // claim before resetting
     await applyTemplate();
-    toast("Sunday reset — tasks repopulated from your template.");
+    toast("New week — your recurring tasks are fresh again.");
   } catch(e){}
 }
 
