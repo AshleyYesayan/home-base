@@ -2318,75 +2318,86 @@ function decorateTaskRows(){
   });
 }
 
+/* first name of a household member, however their profile is filled in */
+function whoName(m){
+  const src = (m.display_name || "").trim() || ((m.email || "").split("@")[0] || "");
+  const hit = src.match(/[A-Za-z]{2,}/);
+  return hit ? hit[0] : "";
+}
+
 function parseQuickAdd(raw){
   let text = String(raw || "").trim();
   if(!text) return null;
-  const out = { table: "weekly_tasks", fields: {} };
-  let lower = text.toLowerCase();
 
-  // WHO first — "for Mourad" / "@Mourad" — before we strip any scaffolding,
-  // otherwise the "for" gets eaten and the name is orphaned.
+  const out = { table: "weekly_tasks", fields: {} };
+
+  /* 1. WHO first — strip scaffolding later or the name gets orphaned */
   for(let i = 0; i < MEMBERS.length; i++){
-    const name = memberName(MEMBERS[i].id);
-    const re = new RegExp("\\b(?:for|@)\\s*" + name.toLowerCase() + "\\b", "i");
-    if(re.test(lower)){
+    const nm = whoName(MEMBERS[i]);
+    if(!nm || nm.length < 2) continue;
+    const re = new RegExp("\\b(?:for|to|@)\\s+" + nm + "\\b", "i");
+    if(re.test(text)){
       out.fields.assignees = [MEMBERS[i].id];
-      out.fields.assignee = MEMBERS[i].id;
-      text = text.replace(re, "").trim();
-      lower = text.toLowerCase();
+      out.fields.assignee  = MEMBERS[i].id;
+      text = text.replace(re, " ");
       break;
     }
   }
 
-  // now drop the polite scaffolding people actually type
-  text = text.replace(/^\s*(?:please\s+)?add\s+(?:a\s+)?(?:new\s+)?(?:task|todo|to-do|item)\b\s*(?:to|for)?\s*/i, "").trim();
-  text = text.replace(/^[\s,:;—–-]+/, "").trim();
-  lower = text.toLowerCase();
+  /* 2. should this repeat every week? */
+  const isRecurring = /\b(recurring|repeating|every week|weekly|each week)\b/i.test(text);
 
-  const every = lower.match(/\bevery\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
-  if(every){
-    const day = every[1].charAt(0).toUpperCase() + every[1].slice(1);
-    out.table = "recurring_tasks";
-    out.fields.day = day;
-    text = text.replace(new RegExp("\\bevery\\s+" + every[1] + "\\b", "i"), "").trim();
-    out.fields.task = text.replace(/\s{2,}/g, " ").replace(/^[\s,-]+|[\s,-]+$/g, "").trim();
-    return out.fields.task ? out : null;
+  /* 3. peel off the scaffolding: "add a recurring task for", "remind me to", ... */
+  text = text
+    .replace(/^\s*(?:hey\s+|ok(?:ay)?\s+|please\s+)*/i, "")
+    .replace(/^\s*(?:can\s+you\s+|could\s+you\s+|i\s+need\s+to\s+|i\s+want\s+to\s+)/i, "")
+    .replace(/^\s*(?:remind\s+me|add|create|make|put|set\s+up|schedule)\b/i, "")
+    .replace(/^\s*(?:a|an|the)\b/i, "")
+    .replace(/^\s*(?:new\s+)?(?:recurring|repeating|weekly|daily)\b/i, "")
+    .replace(/^\s*(?:task|to-?do|item|reminder|chore)\b/i, "")
+    .replace(/\b(?:every|each)\s+week\b/i, " ")
+    .replace(/^\s*(?:on|for|to|about)\b/i, "")
+    .trim();
+
+  /* 4. the day */
+  const DAYNAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+  let dayName = null;
+  const dayRe = new RegExp("\\b(?:on\\s+|every\\s+|each\\s+|next\\s+|this\\s+)?(" + DAYNAMES.join("|") + "|today|tomorrow)\\b", "i");
+  const hit = text.match(dayRe);
+  if(hit){
+    const w = hit[1].toLowerCase();
+    const d = new Date();
+    if(w === "today") dayName = DAYS[d.getDay()];
+    else if(w === "tomorrow"){ const t = new Date(d); t.setDate(t.getDate() + 1); dayName = DAYS[t.getDay()]; }
+    else dayName = w.charAt(0).toUpperCase() + w.slice(1);
+    text = text.replace(dayRe, " ");
   }
 
-  let due = null;
-  if(/\btoday\b/.test(lower)){
-    due = todayStr();
-    text = text.replace(/\btoday\b/i, "").trim();
-  } else if(/\btomorrow\b/.test(lower)){
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    due = isoDate(d);
-    text = text.replace(/\btomorrow\b/i, "").trim();
-  } else if(/\bnext week\b/.test(lower)){
-    const d = startOfWeek(); d.setDate(d.getDate() + 7);
-    due = isoDate(d);
-    text = text.replace(/\bnext week\b/i, "").trim();
+  /* 5. sweep up the prepositions the day left stranded ("for to confirm ...") */
+  for(let p = 0; p < 3; p++){
+    text = text.replace(/\s+/g, " ").replace(/^\s*(?:for|on|to|at|by|about|the|a|an)\b\s*/i, "");
+  }
+  text = text
+    .replace(/\s*\b(?:for|on|to|at|by|about|the|a|an)\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if(!text) return null;
+  text = text.charAt(0).toUpperCase() + text.slice(1);
+
+  if(isRecurring){
+    out.table = "recurring_tasks";
+    out.fields.task = text;
+    if(dayName) out.fields.day = dayName;
   } else {
-    const dow = lower.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/);
-    if(dow){
-      const want = DAYS.indexOf(dow[1].charAt(0).toUpperCase() + dow[1].slice(1));
-      const d = new Date(); d.setHours(0,0,0,0);
-      // The next time that day comes round, counting today. Saying "Sunday" on a
-      // Sunday means today — not a week away.
-      const delta = (want - d.getDay() + 7) % 7;
-      d.setDate(d.getDate() + delta);
-      due = isoDate(d);
-      text = text.replace(new RegExp("\\b" + dow[1] + "\\b", "i"), "").trim();
+    out.fields.task = text;
+    if(dayName){
+      const d = new Date();
+      const want = DAYS.indexOf(dayName);
+      d.setDate(d.getDate() + ((want - d.getDay() + 7) % 7));
+      out.fields.due_date = isoDate(d);
     }
   }
-  if(due) out.fields.due_date = due;
-
-  text = text
-    .replace(/\s{2,}/g, " ")
-    .replace(/\s+for\s*$/i, "")
-    .replace(/^[\s,:;—–-]+|[\s,:;—–-]+$/g, "")
-    .trim();
-  if(!text) return null;
-  out.fields.task = text.charAt(0).toUpperCase() + text.slice(1);
   return out;
 }
 
@@ -2947,7 +2958,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 21";
+const BUILD_ID = "build 22";
 let SCAN = null;
 let BARCODE_COL = null;
 
