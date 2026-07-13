@@ -391,10 +391,10 @@ if("serviceWorker" in navigator){ window.addEventListener("load", ()=>{ navigato
 const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 const PRIMARY_DAYS = ["Sunday","Tuesday","Friday"];
 const MEAL_DAYS = ["Friday","Saturday","Sunday","Monday","Tuesday","Wednesday","Thursday"]; // meal week runs Fri -> Thu
-function weekStartFriday(){ const d=new Date(todayStr()+"T00:00:00"); const off=(d.getDay()-5+7)%7; d.setDate(d.getDate()-off); return d.toISOString().slice(0,10); }
+function weekStartFriday(){ const d=new Date(todayStr()+"T00:00:00"); const off=(d.getDay()-5+7)%7; d.setDate(d.getDate()-off); return isoDate(d); }
 const $ = s => document.querySelector(s);
 const el = (t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
-const todayStr = ()=> new Date().toISOString().slice(0,10);
+const todayStr = ()=> isoDate(new Date());
 const todayName = ()=> DAYS[new Date().getDay()];
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
 /* A delete you can take back. No confirm dialog — that would punish the 99% of
@@ -1380,7 +1380,7 @@ function rescheduleReminder(r, dueStr){
   if(r.interval_unit==="weeks") d.setDate(d.getDate()-7*r.interval_n);
   else if(r.interval_unit==="years") d.setFullYear(d.getFullYear()-r.interval_n);
   else d.setMonth(d.getMonth()-r.interval_n);
-  return sb.from("reminders").update({last_done:d.toISOString().slice(0,10)}).eq("id",r.id).then(()=>refresh("reminders")).then(()=>{ render(); toast("Rescheduled."); });
+  return sb.from("reminders").update({last_done:isoDate(d)}).eq("id",r.id).then(()=>refresh("reminders")).then(()=>{ render(); toast("Rescheduled."); });
 }
 function renderUpcoming(){
   const wrap=$("#upcomingContent"); if(!wrap) return; wrap.innerHTML="";
@@ -1393,7 +1393,7 @@ function renderUpcoming(){
     const row=el("div","row");
     const g=el("div","grow"); g.innerHTML=`<div class="title">${esc(r.name)}</div><div class="sub">${fmtDate(d)} · every ${r.interval_n} ${r.interval_unit}</div>`;
     const pill=el("span","pill "+cls, n<0?(-n)+"d over":(n===0?"today":n+"d"));
-    const dp=el("input"); dp.type="date"; dp.value=d.toISOString().slice(0,10); dp.style.cssText="max-width:150px;flex:none"; dp.onchange=()=>{ if(dp.value) rescheduleReminder(r, dp.value); };
+    const dp=el("input"); dp.type="date"; dp.value=isoDate(d); dp.style.cssText="max-width:150px;flex:none"; dp.onchange=()=>{ if(dp.value) rescheduleReminder(r, dp.value); };
     const done=el("button","icon-btn","✓"); done.title="Done (reset clock to today)"; done.style.color="var(--good)"; done.onclick=()=>markReminder(r.id);
     row.appendChild(g); row.appendChild(pill); row.appendChild(dp); row.appendChild(done); c.appendChild(row);
   });
