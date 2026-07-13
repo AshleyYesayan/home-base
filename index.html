@@ -2444,6 +2444,16 @@ const TOUR = [
 ];
 
 let TOUR_I = 0;
+function visibleEl(sel){
+  const list = [...document.querySelectorAll(sel)];
+  for(let i = 0; i < list.length; i++){
+    const e = list[i];
+    if(e.offsetParent === null) continue;              // hidden pane
+    const r = e.getBoundingClientRect();
+    if(r.width > 0 && r.height > 0) return e;
+  }
+  return null;
+}
 function tourEls(){
   return {
     ov: document.getElementById("tourOv"),
@@ -2480,20 +2490,25 @@ function paintTourStep(){
   if(step.sub) setTimeout(function(){ goSub(step.sub); }, 60);
 
   setTimeout(function(){
-    const target = step.sel ? document.querySelector(step.sel) : null;
+    const target = step.sel ? visibleEl(step.sel) : null;
     const hole = e.hole, card = e.card;
 
     if(target){
       target.scrollIntoView({ block:"center", behavior:"smooth" });
       setTimeout(function(){
         const r = target.getBoundingClientRect();
+        if(r.width < 1 || r.height < 1){
+          hole.style.display = "none";
+          placeCard(card, null);
+          return;
+        }
         hole.style.display = "block";
         hole.style.top = (r.top - 6) + "px";
         hole.style.left = (r.left - 6) + "px";
         hole.style.width = (r.width + 12) + "px";
         hole.style.height = (r.height + 12) + "px";
         placeCard(card, r);
-      }, 260);
+      }, 320);
     } else {
       hole.style.display = "none";
       placeCard(card, null);
