@@ -150,6 +150,19 @@
     .cmt-form{display:flex;gap:6px;margin-top:8px}
     .cmt-in{flex:1;min-height:38px;padding:0 10px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit;background:#fff}
     .who-opt.rot{border-top:1px solid var(--line);margin-top:4px}
+    .row.in-progress .check{box-shadow:0 0 0 3px var(--gold);border-color:var(--gold)}
+    .row.in-progress{background:#fffaf0}
+    .row.in-progress .title::after{content:" · in progress";font-size:11px;font-weight:800;color:#b8860b;letter-spacing:.02em}
+    .legend{max-width:440px;max-height:80vh;overflow-y:auto}
+    .legend-list{margin-top:8px}
+    .legend-row{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+    .lg-icon{flex:0 0 42px;text-align:center;font-size:17px;padding-top:1px}
+    .lg-text{flex:1;font-size:14px;line-height:1.45}
+    .lg-box{display:inline-block;width:22px;height:22px;border:2px solid var(--line);border-radius:7px;background:#fff;vertical-align:middle}
+    .lg-box.ip{box-shadow:0 0 0 3px var(--gold);border-color:var(--gold)}
+    .lg-chip{display:inline-block;background:var(--gold);color:var(--ink);border-radius:999px;padding:2px 8px;font-size:11px;font-weight:800}
+    .lg-due{display:inline-block;background:#eaf3f4;color:var(--teal);border-radius:999px;padding:2px 7px;font-size:10px;font-weight:800}
+    .lg-red{color:#d1554f}
     .install-banner{position:fixed;left:12px;right:12px;bottom:12px;z-index:8000;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 12px 34px rgba(0,0,0,.18)}
     .ib-text{flex:1;font-size:13px;font-weight:600;line-height:1.4}
     .ib-x{border:0;background:transparent;color:var(--muted);font-size:15px;min-width:32px;min-height:32px;cursor:pointer}
@@ -240,7 +253,8 @@
     <div class="brand"><span class="dot">🏡</span> Home Base</div>
     <div class="spacer"></div>
     <span class="whoami" id="whoami"></span>
-    <button class="btn btn-ghost btn-sm" id="getAppBtn">📲 Get the app</button>
+    <button class="btn btn-ghost btn-sm" id="legendBtn" title="What do the symbols mean?">❓ Key</button>
+      <button class="btn btn-ghost btn-sm" id="getAppBtn">📲 Get the app</button>
       <button class="btn btn-ghost btn-sm" id="pushBtn" style="display:none">🔔 Notify me</button>
       <button class="btn btn-ghost btn-sm" id="invite">Invite</button>
     <button class="btn btn-ghost btn-sm" id="signout">Sign out</button>
@@ -612,6 +626,7 @@ async function loadAll(){
   try{ paintPushBtn(); }catch(e){}
   try{ startRealtime(); }catch(e){}
   try{ const gb = document.getElementById("getAppBtn"); if(gb) gb.onclick = openGetApp; installBanner(); }catch(e){}
+  try{ const lb = document.getElementById("legendBtn"); if(lb) lb.onclick = openLegend; }catch(e){}
   await Promise.all(tables.map(async t=>{
     const {data,error} = await sb.from(t).select("*");
     if(!error) DATA[t]=data||[];
@@ -2291,6 +2306,104 @@ function quickAddBar(){
   host.parentNode.insertBefore(bar, host);
 }
 
+/* ---------- In progress ----------
+   Tap the box = done (unchanged — 21 Sunday chores shouldn't cost 42 taps).
+   Press and hold = "I've started this". The box gets a ring. */
+async function toggleInProgress(table, t){
+  const next = !t.in_progress;
+  t.in_progress = next;
+  render();
+  const { error } = await sb.from(table).update({ in_progress: next }).eq("id", t.id);
+  if(error){ t.in_progress = !next; render(); toast("Couldn't save — " + error.message); return; }
+  await refresh(table); render();
+  if(navigator.vibrate) navigator.vibrate(25);
+  toast(next ? "Started — it's in progress" : "No longer in progress");
+}
+
+/* Wire press-and-hold onto every checkbox that belongs to a task */
+function wireInProgress(){
+  document.querySelectorAll(".row").forEach(function(row){
+    const ref = rowRef(row);
+    if(!ref) return;
+    const box = row.querySelector(".check");
+    if(!box || box.dataset.ipWired) return;
+    box.dataset.ipWired = "1";
+
+    const rec = (DATA[ref.table] || []).find(function(x){ return x.id === ref.id; });
+    if(rec && rec.in_progress) row.classList.add("in-progress");
+
+    let timer = null, held = false;
+    const start = function(){
+      held = false;
+      timer = setTimeout(function(){
+        held = true;
+        const r = (DATA[ref.table] || []).find(function(x){ return x.id === ref.id; });
+        if(r) toggleInProgress(ref.table, r);
+      }, 450);
+    };
+    const cancel = function(){ clearTimeout(timer); };
+    box.addEventListener("pointerdown", start);
+    box.addEventListener("pointerup", cancel);
+    box.addEventListener("pointerleave", cancel);
+    box.addEventListener("pointercancel", cancel);
+    // a long press must not also tick the box
+    box.addEventListener("click", function(e){
+      if(held){ e.stopPropagation(); e.preventDefault(); held = false; }
+    }, true);
+    // desktop: right-click does the same
+    box.addEventListener("contextmenu", function(e){
+      e.preventDefault();
+      const r = (DATA[ref.table] || []).find(function(x){ return x.id === ref.id; });
+      if(r) toggleInProgress(ref.table, r);
+    });
+  });
+}
+
+/* ---------- Legend ---------- */
+function openLegend(){
+  const ov = el("div","modal-ov","");
+  const card = el("div","modal legend","");
+  card.appendChild(el("h3", null, "How Home Base works"));
+
+  const rows = [
+    ["<span class='lg-box'></span>", "<b>Tap the box</b> to tick something off."],
+    ["<span class='lg-box ip'></span>", "<b>Press and hold the box</b> to mark it <b>in progress</b> — started, not finished. It gets a ring, like organising the pantry over a weekend. Hold again to clear it."],
+    ["🏈", "<b>Punt</b> — push it to next week. It leaves this week and lands in the same slot next week. Punt a Saturday task and it turns up next Saturday."],
+    ["💬", "<b>Notes</b> — leave a note on a task. \"Already grabbed this.\" Both of you see it."],
+    ["<span class='lg-chip'>AM</span>", "<b>Who's on it.</b> Initials of whoever it's assigned to. Tap to change. Two initials on a split chip means it's on <b>both</b> your lists — like the Wegovy shot."],
+    ["🔄", "<b>Take turns</b> — the chore swaps between you every time it's completed. Off by default; switch it on per chore."],
+    ["<span class='lg-chip'>Sun</span>", "<b>Which day.</b> Tap to move a task to another day. On a <i>routine</i> task this changes the template — it moves every week."],
+    ["<span class='lg-due'>Fri 7/17</span>", "<b>Due date.</b> Turns <b class='lg-red'>red</b> when it's overdue."],
+    ["▸", "<b>Routine</b> — your repeating list, folded up. Tap to open. It refills automatically every Monday."],
+    ["📷", "<b>Scan a barcode</b> on the Stock tab. Known item counts up; a new one asks you to name it once, then remembers."],
+    ["🔔", "<b>Notify me</b> — turns on notifications. On iPhone this only works once Home Base is on your Home Screen."]
+  ];
+  const list = el("div","legend-list","");
+  rows.forEach(function(r){
+    const item = el("div","legend-row","");
+    item.appendChild(el("div","lg-icon", r[0]));
+    item.appendChild(el("div","lg-text", r[1]));
+    list.appendChild(item);
+  });
+  card.appendChild(list);
+
+  card.appendChild(el("div","modal-lbl","The week"));
+  card.appendChild(el("div","sub","Runs <b>Monday to Sunday</b> and starts fresh every Monday, when your routine unticks itself. <b>This week</b> holds one-offs you can punt. <b>Recurring</b> is the template that repeats — edit it there and it changes every week."));
+
+  card.appendChild(el("div","modal-lbl","Digests"));
+  card.appendChild(el("div","sub","<b>Friday 7am</b> — what's on for the weekend. <b>Sunday 7pm</b> — what's ahead Monday to Friday."));
+
+  const row = el("div","modal-row","");
+  const close = el("button","btn btn-gold","Got it");
+  close.onclick = function(){ ov.remove(); };
+  row.appendChild(close);
+  card.appendChild(row);
+
+  ov.appendChild(card);
+  ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+
 /* ---------- Add to Home Screen ----------
    Apple only allows notifications and the camera once the app is installed,
    so this is not a nicety — half the product depends on it. */
@@ -2871,6 +2984,7 @@ render = function(){
   try{ applyTaskFilter(); }catch(e){}
   try{ makeTasksEditable(); }catch(e){}
   try{ decorateTaskRows(); }catch(e){}
+  try{ wireInProgress(); }catch(e){}
   try{ stampMealDates(); }catch(e){}
   return out;
 };
