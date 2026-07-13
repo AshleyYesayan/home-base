@@ -153,6 +153,30 @@
     .row.in-progress .check{box-shadow:0 0 0 3px var(--gold);border-color:var(--gold)}
     .row.in-progress{background:#fffaf0}
     .row.in-progress .title::after{content:" · in progress";font-size:11px;font-weight:800;color:#b8860b;letter-spacing:.02em}
+    .quick-add{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    .quick-add .qa-in{flex:1 1 100%;min-width:0;width:100%;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+    .quick-add .qa-mic{flex:0 0 auto}
+    .quick-add .qa-add{flex:1 1 auto}
+    .topbar{display:flex;align-items:center;gap:10px;flex-wrap:nowrap}
+    .brand{white-space:nowrap;font-weight:800}
+    .hdr-push{min-width:42px;padding:0 10px}
+    .menu-btn{min-width:44px;min-height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:18px;cursor:pointer;line-height:1}
+    .menu-sheet{position:fixed;top:58px;right:12px;z-index:8500;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,.18);padding:6px;min-width:232px}
+    .menu-who{font-size:12px;color:var(--muted);padding:8px 12px 10px;border-bottom:1px solid var(--line);word-break:break-all}
+    .menu-item{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:0 12px;border:0;background:transparent;font-family:inherit;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;border-radius:9px;text-align:left}
+    .menu-item:hover{background:var(--bg)}
+    .menu-item.danger{color:#d1554f}
+    .link-box{display:block;margin:8px 0 4px;padding:12px;border:1px dashed var(--line);border-radius:10px;background:var(--bg);font-size:12px;word-break:break-all;color:var(--ink);font-weight:700;text-decoration:none}
+    .steps{margin:6px 0 10px;padding-left:20px;font-size:13.5px;line-height:1.7}
+    .modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .scan-torch{min-width:56px;min-height:48px;background:rgba(255,255,255,.18);color:#fff;border:2px solid #fff;border-radius:999px;font-size:18px}
+    .scan-torch.on{background:var(--gold);color:#111;border-color:var(--gold)}
+    .coach{position:fixed;z-index:9200;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px rgba(0,0,0,.24)}
+    .coach-body{font-size:13px;line-height:1.5}
+    .coach-row{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:10px}
+    .coach-skip{border:0;background:transparent;color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;padding:0}
+    .coach-target{box-shadow:0 0 0 3px var(--gold);border-radius:10px}
+    @media(max-width:620px){ .brand{font-size:16px} .menu-sheet{left:12px;right:12px;min-width:0} }
     .tour-ov{position:fixed;inset:0;z-index:9500;pointer-events:auto}
     .tour-hole{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(17,17,17,.62), 0 0 0 3px var(--gold);transition:all .22s ease;pointer-events:none}
     .tour-card{position:fixed;z-index:9600;background:var(--card);border-radius:16px;padding:16px 18px;box-shadow:0 18px 50px rgba(0,0,0,.34);max-width:340px}
@@ -266,13 +290,17 @@
   <header class="topbar">
     <div class="brand"><span class="dot">🏡</span> Home Base</div>
     <div class="spacer"></div>
-    <span class="whoami" id="whoami"></span>
-    <button class="btn btn-ghost btn-sm" id="helpBtn" title="Tour, key and questions">❓ Help</button>
-      <button class="btn btn-ghost btn-sm" id="getAppBtn">📲 Get the app</button>
-      <button class="btn btn-ghost btn-sm" id="pushBtn" style="display:none">🔔 Notify me</button>
-      <button class="btn btn-ghost btn-sm" id="invite">Invite</button>
-    <button class="btn btn-ghost btn-sm" id="signout">Sign out</button>
+    <button class="btn btn-ghost btn-sm hdr-push" id="pushBtn" style="display:none">🔔</button>
+    <button class="menu-btn" id="menuBtn" aria-label="Menu">☰</button>
   </header>
+  <div class="menu-sheet" id="menuSheet" hidden>
+    <div class="menu-who" id="whoami"></div>
+    <button class="menu-item" id="helpBtn"><span>❓</span> Help &amp; tour</button>
+    <button class="menu-item" id="getAppBtn"><span>📲</span> Get the app</button>
+    <button class="menu-item" id="notifyItem"><span>🔔</span> Turn on notifications</button>
+    <button class="menu-item" id="invite"><span>✉️</span> Invite someone</button>
+    <button class="menu-item danger" id="signout"><span>↩︎</span> Sign out</button>
+  </div>
   <nav class="tabs" id="tabs">
     <button data-v="today" class="active">Dashboard</button>
     <button data-v="tasks">Tasks</button>
@@ -304,7 +332,7 @@
       </div>
       <div class="pane" id="pane-recurring">
         <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
-        <p class="muted small" style="margin:0 0 14px">This is the <strong>template</strong> — it repeats every week. For a one-off like an ATM run, add it under <strong>This week</strong> instead, where you can punt it. Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it starts fresh every Monday).</p>
+        <p class="muted small" style="margin:0 0 14px">This is the <strong>template</strong> — it repeats every week. For a one-off, add it under <strong>This week</strong> instead, where you can punt it. Sundays are restock &amp; meal-prep. Tuesdays are your house manager day. Fridays are the full clean, mow &amp; watering. "Refresh tasks" restores every day to your saved template (and it starts fresh every Monday).</p>
         <div id="tasksContent"></div>
       </div>
       <div class="pane" id="pane-handyman">
@@ -640,7 +668,24 @@ async function loadAll(){
   try{ paintPushBtn(); }catch(e){}
   try{ startRealtime(); }catch(e){}
   try{ const gb = document.getElementById("getAppBtn"); if(gb) gb.onclick = openGetApp; installBanner(); }catch(e){}
-  try{ const lb = document.getElementById("helpBtn"); if(lb) lb.onclick = function(){ openHelp("key"); }; }catch(e){}
+  try{
+    const mb = document.getElementById("menuBtn");
+    const sheet = document.getElementById("menuSheet");
+    if(mb && sheet && !mb.dataset.wired){
+      mb.dataset.wired = "1";
+      mb.onclick = function(e){ e.stopPropagation(); sheet.hidden = !sheet.hidden; };
+      document.addEventListener("click", function(e){
+        if(!sheet.hidden && !sheet.contains(e.target) && e.target !== mb) sheet.hidden = true;
+      });
+      sheet.querySelectorAll(".menu-item").forEach(function(b){
+        b.addEventListener("click", function(){ sheet.hidden = true; });
+      });
+    }
+    const lb = document.getElementById("helpBtn");
+    if(lb) lb.onclick = function(){ openHelp("key"); };
+    const ni = document.getElementById("notifyItem");
+    if(ni) ni.onclick = enablePush;
+  }catch(e){}
   try{ maybeAutoTour(); }catch(e){}
   await Promise.all(tables.map(async t=>{
     const {data,error} = await sb.from(t).select("*");
@@ -1733,7 +1778,7 @@ function paintWeek(wrap){
   const anyList = mineOnly(t.any).filter(function(x){ return SHOW_DONE || !x.done; });
   const an = el("div","card","");
   an.appendChild(el("h3", null, "🗒️ Anytime this week" + (anyList.length ? ' <span class="pill">' + anyList.length + "</span>" : "")));
-  an.appendChild(el("div","sub","No particular day — like the ATM run. Give it a day and it moves up."));
+  an.appendChild(el("div","sub","No particular day. Give it a day and it moves up into that block."));
   anyList.forEach(function(x){ an.appendChild(oneOffRow(x)); });
   an.appendChild(addRow("Add a one-off…", null, thisW));
   wrap.appendChild(an);
@@ -2701,31 +2746,73 @@ async function shareApp(){
 }
 
 function openGetApp(){
-  // Android and desktop Chrome can install for real, right here.
-  if(DEFERRED_INSTALL){
-    DEFERRED_INSTALL.prompt();
-    DEFERRED_INSTALL = null;
-    return;
-  }
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const LINK = "https://ashleyyesayan.github.io/home-base/install.html";
+
   const ov = el("div","modal-ov","");
   const card = el("div","modal","");
-  card.appendChild(el("h3", null, "Put Home Base on your phone"));
-  if(isInstalled()){
-    card.appendChild(el("div","sub","You're already running the installed app. Nice."));
-  } else if(isIOSDevice()){
-    card.appendChild(el("div","sub","In <strong>Safari</strong>: tap the <strong>Share</strong> button, then <strong>Add to Home Screen</strong>."));
-    card.appendChild(el("div","modal-lbl","Why it matters"));
-    card.appendChild(el("div","sub","Apple only lets notifications and the barcode scanner work from the installed app — not a browser tab."));
+  card.appendChild(el("h3","","📲 Get Home Base on your phone"));
+
+  if(standalone){
+    card.appendChild(el("p","muted","You're already running the installed app. Use the link below to set someone else up."));
+  } else if(DEFERRED_INSTALL){
+    card.appendChild(el("p","muted","Tap below to install Home Base on this device."));
+    const b = el("button","btn btn-gold","Install Home Base");
+    b.onclick = async function(){
+      try{
+        DEFERRED_INSTALL.prompt();
+        await DEFERRED_INSTALL.userChoice;
+        DEFERRED_INSTALL = null;
+        ov.remove();
+      }catch(e){ b.textContent = "Use your browser menu, then Install app"; }
+    };
+    card.appendChild(b);
+  } else if(isIOS){
+    const ol = el("ol","steps","");
+    ["Tap the Share button at the bottom of Safari — the square with an arrow.",
+     "Scroll down and tap Add to Home Screen.",
+     "Tap Add. Home Base now lives on your home screen, and notifications will work."]
+      .forEach(function(t){ ol.appendChild(el("li","",t)); });
+    card.appendChild(ol);
+    card.appendChild(el("p","muted","This only works in Safari, not in Chrome on iPhone."));
   } else {
-    card.appendChild(el("div","sub","Open your browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>."));
+    card.appendChild(el("p","muted","Open your browser menu and choose Install app, or Add to Home screen."));
   }
-  const row = el("div","modal-row","");
-  const share = el("button","btn btn-gold","Share the link");
-  share.onclick = function(){ ov.remove(); shareApp(); };
-  const close = el("button","btn","Close");
+
+  card.appendChild(el("h4","","Send it to someone"));
+  const a = document.createElement("a");
+  a.className = "link-box";
+  a.href = LINK; a.target = "_blank"; a.rel = "noopener";
+  a.textContent = LINK;
+  card.appendChild(a);
+
+  const row = el("div","modal-actions","");
+  const copy = el("button","btn","Copy link");
+  copy.onclick = async function(){
+    try{ await navigator.clipboard.writeText(LINK); copy.textContent = "Copied"; }
+    catch(e){
+      const ta = document.createElement("textarea");
+      ta.value = LINK; document.body.appendChild(ta); ta.select();
+      try{ document.execCommand("copy"); copy.textContent = "Copied"; }
+      catch(e2){ copy.textContent = "Long-press the link"; }
+      ta.remove();
+    }
+  };
+  row.appendChild(copy);
+
+  if(navigator.share){
+    const sh = el("button","btn btn-gold","Share");
+    sh.onclick = function(){
+      navigator.share({ title: "Home Base", text: "Our household, in one place. Add it to your home screen:", url: LINK }).catch(function(){});
+    };
+    row.appendChild(sh);
+  }
+  const close = el("button","btn btn-ghost","Close");
   close.onclick = function(){ ov.remove(); };
-  row.appendChild(close); row.appendChild(share);
+  row.appendChild(close);
   card.appendChild(row);
+
   ov.appendChild(card);
   ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
   document.body.appendChild(ov);
@@ -2753,7 +2840,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 12";
+const BUILD_ID = "build 13";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -2967,37 +3054,49 @@ async function openScanner(){
 
   const canvas = document.createElement("canvas");
   const rot = document.createElement("canvas");
+  let tries = 0;
+
+  try{
+    const track = stream.getVideoTracks()[0];
+    const caps = track.getCapabilities ? track.getCapabilities() : {};
+    if(caps.torch){
+      const t = el("button","btn scan-torch","🔦");
+      t.onclick = async function(){
+        const on = !t.classList.contains("on");
+        try{ await track.applyConstraints({ advanced: [{ torch: on }] }); t.classList.toggle("on", on); }catch(e){}
+      };
+      bar.insertBefore(t, done);
+    }
+  }catch(e){}
+
+  function grab(sx, sy, sw, sh, targetW){
+    const scale = Math.min(1, targetW / sw);
+    const dw = Math.max(1, Math.round(sw * scale));
+    const dh = Math.max(1, Math.round(sh * scale));
+    canvas.width = dw; canvas.height = dh;
+    canvas.getContext("2d", { willReadFrequently: true })
+      .drawImage(video, sx, sy, sw, sh, 0, 0, dw, dh);
+    let code = decodeCanvas(zxr, canvas);
+    if(code) return code;
+    rot.width = dh; rot.height = dw;
+    const rc = rot.getContext("2d", { willReadFrequently: true });
+    rc.save(); rc.translate(dh / 2, dw / 2); rc.rotate(Math.PI / 2);
+    rc.drawImage(canvas, -dw / 2, -dh / 2); rc.restore();
+    return decodeCanvas(zxr, rot);
+  }
 
   const scan = async function(){
     if(stopped) return;
     const vw = video.videoWidth, vh = video.videoHeight;
     if(vw && vh){
-      frames++;
-      const cw = Math.floor(vw * 0.92), ch = Math.floor(vh * 0.45);
-      const cx = Math.floor((vw - cw) / 2), cy = Math.floor((vh - ch) / 2);
-      const scale = Math.min(1, 1000 / cw);
-      const dw = Math.max(1, Math.floor(cw * scale));
-      const dh = Math.max(1, Math.floor(ch * scale));
-      canvas.width = dw; canvas.height = dh;
-      canvas.getContext("2d", { willReadFrequently: true })
-        .drawImage(video, cx, cy, cw, ch, 0, 0, dw, dh);
-
-      let code = decodeCanvas(zxr, canvas);
-
-      if(!code){
-        rot.width = dh; rot.height = dw;
-        const rctx = rot.getContext("2d", { willReadFrequently: true });
-        rctx.save();
-        rctx.translate(dh / 2, dw / 2);
-        rctx.rotate(Math.PI / 2);
-        rctx.drawImage(canvas, -dw / 2, -dh / 2);
-        rctx.restore();
-        code = decodeCanvas(zxr, rot);
-      }
-
+      frames++; tries++;
+      let code = grab(Math.floor(vw * 0.04), Math.floor(vh * 0.27), Math.floor(vw * 0.92), Math.floor(vh * 0.46), 1400);
+      if(!code && tries % 3 === 0) code = grab(0, 0, vw, vh, 1200);
+      if(!code && tries % 5 === 0) code = grab(Math.floor(vw * 0.22), Math.floor(vh * 0.36), Math.floor(vw * 0.56), Math.floor(vh * 0.28), 900);
       if(code) await onCode(code);
+      else if(tries === 45) status.textContent = "Still looking — fill the box with the barcode, hold steady, add light.";
     }
-    if(!stopped) setTimeout(scan, 120);
+    if(!stopped) setTimeout(scan, 90);
   };
   scan();
 }
@@ -3125,6 +3224,55 @@ function buildReview(c){
   }
 }
 
+/* ---------- Coach marks ---------- */
+const COACH = [
+  { key:"hold",     sel:".check",           text:"<b>Tap</b> the box to tick it off. <b>Press and hold</b> to mark it in progress." },
+  { key:"punt",     sel:".punt-btn",        text:"🏈 <b>Punt.</b> Can't get to it? Send it to next week — it comes back in the same slot." },
+  { key:"who",      sel:".who-wrap.shared", text:"Two initials means it's on <b>both</b> your lists. Neither of you can lose it." },
+  { key:"routine",  sel:".routine-head",    text:"Your repeating chores, folded away. Tap to open — they refill every Monday." },
+  { key:"progress", sel:".row.in-progress", text:"A ring means <b>in progress</b> — started, not finished. Hold the box again to clear it." }
+];
+let COACH_ON = false;
+function coachSeen(k){ return localStorage.getItem("hb_coach_" + k) === "1"; }
+function coachDone(k){ localStorage.setItem("hb_coach_" + k, "1"); }
+function maybeCoach(){
+  if(COACH_ON) return;
+  if(document.getElementById("tourOv")) return;
+  if(document.querySelector(".modal-ov")) return;
+  for(let i = 0; i < COACH.length; i++){
+    const c = COACH[i];
+    if(coachSeen(c.key)) continue;
+    const t = visibleEl(c.sel);
+    if(!t) continue;
+    showCoach(c, t);
+    return;
+  }
+}
+function showCoach(c, target){
+  COACH_ON = true;
+  const r = target.getBoundingClientRect();
+  const tip = el("div","coach","");
+  tip.innerHTML = '<div class="coach-body">' + c.text + "</div>";
+  const ok = el("button","btn btn-gold btn-sm","Got it");
+  ok.onclick = function(){ coachDone(c.key); tip.remove(); COACH_ON = false; setTimeout(maybeCoach, 600); };
+  const all = el("button","coach-skip","Skip all tips");
+  all.onclick = function(){ COACH.forEach(function(x){ coachDone(x.key); }); tip.remove(); COACH_ON = false; };
+  const row = el("div","coach-row","");
+  row.appendChild(all); row.appendChild(ok);
+  tip.appendChild(row);
+  document.body.appendChild(tip);
+  const w = Math.min(280, window.innerWidth - 24);
+  tip.style.width = w + "px";
+  const below = r.bottom + 10;
+  const fits = below + 150 < window.innerHeight;
+  tip.style.top = (fits ? below : Math.max(10, r.top - 160)) + "px";
+  let left = r.left + r.width / 2 - w / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - w - 12));
+  tip.style.left = left + "px";
+  target.classList.add("coach-target");
+  setTimeout(function(){ target.classList.remove("coach-target"); }, 3500);
+}
+
 /* ---------- Web Push ---------- */
 const VAPID_PUBLIC = "BCYMdRopZLNiIq6qF-ohRY17BFyJFkFibhtAP6h_k9Nh9EvDmcLwxeoSSaem0RDyCQtEo17X2ktKrPRGWSq6nGI";
 const PUSH_FN = "https://wjuejftzrrfhdurfpukd.supabase.co/functions/v1/send-push";
@@ -3246,6 +3394,7 @@ render = function(){
   try{ makeTasksEditable(); }catch(e){}
   try{ decorateTaskRows(); }catch(e){}
   try{ wireInProgress(); }catch(e){}
+  try{ clearTimeout(window.__ct); window.__ct = setTimeout(maybeCoach, 900); }catch(e){}
   try{ stampMealDates(); }catch(e){}
   return out;
 };
