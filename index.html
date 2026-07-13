@@ -171,6 +171,13 @@
     .modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
     .scan-torch{min-width:56px;min-height:48px;background:rgba(255,255,255,.18);color:#fff;border:2px solid #fff;border-radius:999px;font-size:18px}
     .scan-torch.on{background:var(--gold);color:#111;border-color:var(--gold)}
+    .qty-pop{position:fixed;z-index:9400;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.24);padding:12px}
+    .qty-head{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+    .qty-row{display:flex;align-items:center;justify-content:center;gap:14px}
+    .qty-b{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:20px;font-weight:800;cursor:pointer;line-height:1;color:var(--ink)}
+    .qty-n{min-width:44px;text-align:center;font-size:24px;font-weight:800}
+    .qty-hint{font-size:11.5px;color:var(--muted);text-align:center;margin-top:8px}
+    .qty-acts{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
     .gl-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
     .gl-count{font-size:13px;font-weight:700;color:var(--muted)}
     .gl-row .sub{font-size:11px}
@@ -932,7 +939,7 @@ function renderToday(){
         const shop=aBtn("btn btn-sm btn-ghost","Shop", p.amazon_asin ? amazonCartUrl([{asin:p.amazon_asin, qty:Math.max(1,p.par-p.count)}]) : instacartUrl(p.name));
         shop.title = p.amazon_asin ? "Add to your Amazon cart" : "Find it at "+getStore();
         const got=el("button","btn btn-sm","Bought"); got.title="Mark it restocked to par";
-        got.onclick=()=>markBought(p);
+        got.onclick = function(e){ askBought(p, e.currentTarget); };
         row.appendChild(g); row.appendChild(shop); row.appendChild(got);
         c.appendChild(row);
       });
@@ -1243,15 +1250,67 @@ async function adjPar(p,d){
 }
 
 /* One tap from the Dashboard: "I bought it" -> back up to par, off the list. */
-async function markBought(p){
-  const was = p.count;
-  const {error}=await sb.from("pantry_items").update({count:p.par}).eq("id",p.id);
-  if(error){ toast("Couldn't save — "+error.message); return; }
-  p.count=p.par; await refresh("pantry_items"); render();
-  toastUndo(`${p.name} restocked`, async ()=>{
-    await sb.from("pantry_items").update({count:was}).eq("id",p.id);
-    await refresh("pantry_items"); render();
+async function markBought(p, qty){
+  const was = p.count || 0;
+  const add = Math.max(1, parseInt(qty, 10) || 1);
+  const now = was + add;
+  const { error } = await sb.from("pantry_items").update({ count: now }).eq("id", p.id);
+  if(error){ toast("Couldn't save: " + error.message); return; }
+  await refresh("pantry_items");
+  render();
+  toastUndo("Added " + add + " — " + p.name + " now " + now + " of " + (p.par || 0), async function(){
+    await sb.from("pantry_items").update({ count: was }).eq("id", p.id);
+    await refresh("pantry_items");
+    render();
   });
+}
+
+/* "how many did you buy?" — defaults to the shortfall, but you can buy more or fewer */
+function askBought(p, anchor){
+  document.querySelectorAll(".qty-pop").forEach(function(x){ x.remove(); });
+  const need = Math.max(1, (p.par || 0) - (p.count || 0));
+  let n = need;
+
+  const pop = el("div","qty-pop","");
+  pop.appendChild(el("div","qty-head","How many did you buy?"));
+
+  const rowEl = el("div","qty-row","");
+  const minus = el("button","qty-b","−");
+  const val = el("div","qty-n", String(n));
+  const plus = el("button","qty-b","+");
+  minus.onclick = function(e){ e.stopPropagation(); if(n > 1){ n--; val.textContent = String(n); paintHint(); } };
+  plus.onclick  = function(e){ e.stopPropagation(); n++; val.textContent = String(n); paintHint(); };
+  rowEl.appendChild(minus); rowEl.appendChild(val); rowEl.appendChild(plus);
+  pop.appendChild(rowEl);
+
+  const hint = el("div","qty-hint","");
+  function paintHint(){
+    const after = (p.count || 0) + n;
+    hint.textContent = "Stock goes " + (p.count || 0) + " → " + after + " (par " + (p.par || 0) + ")";
+  }
+  paintHint();
+  pop.appendChild(hint);
+
+  const acts = el("div","qty-acts","");
+  const cancel = el("button","btn btn-ghost btn-sm","Cancel");
+  cancel.onclick = function(e){ e.stopPropagation(); pop.remove(); };
+  const save = el("button","btn btn-gold btn-sm","Add to stock");
+  save.onclick = function(e){ e.stopPropagation(); pop.remove(); markBought(p, n); };
+  acts.appendChild(cancel); acts.appendChild(save);
+  pop.appendChild(acts);
+
+  document.body.appendChild(pop);
+  const r = anchor.getBoundingClientRect();
+  const w = Math.min(230, window.innerWidth - 24);
+  pop.style.width = w + "px";
+  pop.style.top = Math.min(r.bottom + 8, window.innerHeight - 190) + "px";
+  pop.style.left = Math.max(12, Math.min(r.right - w, window.innerWidth - w - 12)) + "px";
+
+  setTimeout(function(){
+    document.addEventListener("click", function h(ev){
+      if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener("click", h); }
+    });
+  }, 10);
 }
 let PAR_EDIT = null;   // which item is showing its Par stepper
 let LINK_OPEN = false; // the Amazon-link panel is collapsed until you want it
@@ -2874,7 +2933,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 16";
+const BUILD_ID = "build 17";
 let SCAN = null;
 let BARCODE_COL = null;
 
