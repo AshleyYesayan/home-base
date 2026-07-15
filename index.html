@@ -1450,11 +1450,12 @@ function orderMealDays(){
   const rows = [...pane.querySelectorAll(".mealday")];
   if(rows.length < 2) return;
   const parent = rows[0].parentNode;
+  const NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
   const key = function(node){
-    const lab = ((node.querySelector(".d") || {}).textContent || "").trim();
-    const m = lab.match(/(\d{1,2})\/(\d{1,2})/);
-    if(m) return parseInt(m[1],10) * 100 + parseInt(m[2],10);
-    return 9999;
+    const lab = ((node.querySelector(".d") || {}).textContent || "").trim().toLowerCase();
+    const nm = (lab.match(/^([a-z]+)/) || [])[1] || "";
+    const r = NAMES.indexOf(nm);
+    return r === -1 ? 99 : r;
   };
   rows.slice().sort(function(a,b){ return key(a) - key(b); })
       .forEach(function(n){ parent.appendChild(n); });
@@ -2976,7 +2977,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 24";
+const BUILD_ID = "build 25";
 let SCAN = null;
 let BARCODE_COL = null;
 
