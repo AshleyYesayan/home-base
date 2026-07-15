@@ -1449,16 +1449,29 @@ function orderMealDays(){
   if(!pane) return;
   const rows = [...pane.querySelectorAll(".mealday")];
   if(rows.length < 2) return;
-  const parent = rows[0].parentNode;
   const NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
-  const key = function(node){
+  const rank = function(node){
     const lab = ((node.querySelector(".d") || {}).textContent || "").trim().toLowerCase();
     const nm = (lab.match(/^([a-z]+)/) || [])[1] || "";
     const r = NAMES.indexOf(nm);
     return r === -1 ? 99 : r;
   };
-  rows.slice().sort(function(a,b){ return key(a) - key(b); })
+  const ranks = rows.map(rank);
+  let sorted = true;
+  for(let i = 1; i < ranks.length; i++){ if(ranks[i] < ranks[i-1]){ sorted = false; break; } }
+  if(sorted) return;                         /* already in order — no writes, no observer loop */
+  const parent = rows[0].parentNode;
+  rows.slice().sort(function(a,b){ return rank(a) - rank(b); })
       .forEach(function(n){ parent.appendChild(n); });
+}
+
+/* The meal pane gets rebuilt by several code paths (full render, inline meal edit).
+   An observer guarantees the days stay in calendar order no matter which one ran. */
+function watchMealOrder(){
+  const pane = document.getElementById("pane-meals");
+  if(!pane || pane.dataset.mealWatch) return;
+  pane.dataset.mealWatch = "1";
+  new MutationObserver(function(){ orderMealDays(); }).observe(pane, { childList: true, subtree: true });
 }
 
 function renderMeal(){
@@ -2977,7 +2990,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 25";
+const BUILD_ID = "build 26";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4157,6 +4170,7 @@ render = function(){
   try{ clearTimeout(window.__ct); window.__ct = setTimeout(maybeCoach, 900); }catch(e){}
   try{ stampMealDates(); }catch(e){}
   try{ orderMealDays(); }catch(e){}
+  try{ watchMealOrder(); }catch(e){}
   return out;
 };
 
