@@ -225,9 +225,14 @@
     .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
     .cal-title{font-weight:800;font-size:16px;color:var(--teal-d)}
     .cal-nav{width:40px;height:40px;border:1px solid var(--line);background:var(--card);border-radius:10px;font-size:20px;cursor:pointer;line-height:1}
-    .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+    .cal-dow{display:grid;grid-template-columns:30px repeat(7,1fr);gap:4px;margin-bottom:4px}
     .cal-dow-c{text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase}
-    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+    .cal-grid{display:grid;grid-template-columns:30px repeat(7,1fr);gap:4px}
+    .cal-week-btn{border:1px solid var(--line);background:var(--card);border-radius:9px;cursor:pointer;font-size:18px;color:var(--teal);display:flex;align-items:center;justify-content:center;padding:0}
+    .cal-week-btn:hover{background:var(--teal);color:#fff}
+    .wk-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .wk-day{width:74px;flex:0 0 auto;font-size:12px;font-weight:700;color:var(--teal-d)}
+    .wk-ta{flex:1 1 auto;min-width:0;resize:none;font-family:inherit;font-size:13px;line-height:1.35;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
     .cal-cell{min-height:64px;border:1px solid var(--line);border-radius:9px;padding:4px 5px;background:var(--card);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;gap:2px}
     .cal-cell.empty{border:0;background:transparent;cursor:default}
     .cal-cell.today{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
@@ -1521,6 +1526,44 @@ async function setMealFor(iso, text){
 }
 let CAL_MONTH = null;
 function calMonth(){ if(!CAL_MONTH){ const n = new Date(); CAL_MONTH = new Date(n.getFullYear(), n.getMonth(), 1); } return CAL_MONTH; }
+function planWeek(sunday){
+  const start = new Date(sunday);
+  const days = [];
+  for(let i = 0; i < 7; i++){ const d = new Date(start); d.setDate(start.getDate() + i); days.push(d); }
+  const ov = el("div","modal-ov",""); const card = el("div","modal","");
+  const end = days[6];
+  card.appendChild(el("h3","","Plan " + start.toLocaleDateString("default",{month:"short",day:"numeric"}) + " \u2013 " + end.toLocaleDateString("default",{month:"short",day:"numeric"})));
+  const tas = [];
+  days.forEach(function(d){
+    const iso = mcIso(d); const r = mealForDate(iso);
+    const row = el("div","wk-row","");
+    row.appendChild(el("div","wk-day", d.toLocaleDateString("default",{weekday:"short"}) + " " + (d.getMonth()+1) + "/" + d.getDate()));
+    const ta = document.createElement("textarea");
+    ta.className = "wk-ta"; ta.rows = 1; ta.placeholder = "What's for dinner?";
+    ta.value = r && r.meal_text ? r.meal_text : "";
+    row.appendChild(ta); tas.push({ iso: iso, ta: ta, orig: (r && r.meal_text) ? r.meal_text : "" });
+    card.appendChild(row);
+  });
+  const acts = el("div","modal-actions","");
+  const close = el("button","btn btn-ghost","Cancel"); close.onclick = function(){ ov.remove(); };
+  const save = el("button","btn btn-gold","Save week");
+  save.onclick = async function(){
+    save.disabled = true; save.textContent = "Saving\u2026";
+    for(const t of tas){
+      const v = t.ta.value.trim();
+      if(v !== t.orig){
+        await sb.from("meal_calendar").upsert({ household_id: CURRENT_HH, date: t.iso, meal_text: v, updated_at: new Date().toISOString() }, { onConflict: "household_id,date" });
+        let rr = mealForDate(t.iso);
+        if(rr) rr.meal_text = v; else (DATA.meal_calendar = DATA.meal_calendar || []).push({ household_id: CURRENT_HH, date: t.iso, meal_text: v });
+      }
+    }
+    ov.remove(); render(); paintCalendar();
+  };
+  acts.appendChild(close); acts.appendChild(save); card.appendChild(acts);
+  ov.appendChild(card); ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+
 function paintCalendar(){
   const host = document.getElementById("calContent");
   if(!host) return;
@@ -1533,22 +1576,32 @@ function paintCalendar(){
   head.appendChild(el("div","cal-title", first.toLocaleString("default", { month:"long", year:"numeric" })));
   head.appendChild(next);
   host.appendChild(head);
+  host.appendChild(el("p","muted small","Tap a day to plan it \u2014 or tap \u2023 beside a week to plan all seven at once."));
   const dow = el("div","cal-dow","");
+  dow.appendChild(el("div","cal-dow-c",""));
   ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(function(w){ dow.appendChild(el("div","cal-dow-c", w)); });
   host.appendChild(dow);
   const grid = el("div","cal-grid","");
   const pad = new Date(y, mo, 1).getDay();
   const dim = new Date(y, mo+1, 0).getDate();
   const todayIso = mcIso(new Date());
-  for(let i = 0; i < pad; i++) grid.appendChild(el("div","cal-cell empty",""));
-  for(let d = 1; d <= dim; d++){
-    const iso = mcIso(new Date(y, mo, d));
-    const cell = el("div","cal-cell" + (iso === todayIso ? " today" : ""), "");
-    cell.appendChild(el("div","cal-daynum", String(d)));
-    const r = mealForDate(iso);
-    cell.appendChild(el("div","cal-meal", r && r.meal_text ? r.meal_text : ""));
-    cell.onclick = function(){ openMealEditor(iso); };
-    grid.appendChild(cell);
+  const weeks = Math.ceil((pad + dim) / 7);
+  for(let w = 0; w < weeks; w++){
+    const weekSunday = new Date(y, mo, 1 - pad + w*7);
+    const gbtn = el("button","cal-week-btn","\u2023"); gbtn.title = "Plan this week";
+    (function(ws){ gbtn.onclick = function(e){ e.stopPropagation(); planWeek(ws); }; })(new Date(weekSunday));
+    grid.appendChild(gbtn);
+    for(let dcol = 0; dcol < 7; dcol++){
+      const dayNum = (w*7 + dcol) - pad + 1;
+      if(dayNum < 1 || dayNum > dim){ grid.appendChild(el("div","cal-cell empty","")); continue; }
+      const iso = mcIso(new Date(y, mo, dayNum));
+      const cell = el("div","cal-cell" + (iso === todayIso ? " today" : ""), "");
+      cell.appendChild(el("div","cal-daynum", String(dayNum)));
+      const r = mealForDate(iso);
+      cell.appendChild(el("div","cal-meal", r && r.meal_text ? r.meal_text : ""));
+      cell.onclick = function(){ openMealEditor(iso); };
+      grid.appendChild(cell);
+    }
   }
   host.appendChild(grid);
 }
@@ -3093,7 +3146,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 28";
+const BUILD_ID = "build 29";
 let SCAN = null;
 let BARCODE_COL = null;
 
