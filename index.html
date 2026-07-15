@@ -217,6 +217,20 @@
     .noff-item.clear{border-top:1px solid var(--line);margin-top:4px;padding-top:10px}
     .noff-v{font-size:14px;font-weight:700;color:var(--ink)}
     .noff-h{font-size:11.5px;color:var(--muted)}
+    .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+    .cal-title{font-weight:800;font-size:16px;color:var(--teal-d)}
+    .cal-nav{width:40px;height:40px;border:1px solid var(--line);background:var(--card);border-radius:10px;font-size:20px;cursor:pointer;line-height:1}
+    .cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+    .cal-dow-c{text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+    .cal-cell{min-height:64px;border:1px solid var(--line);border-radius:9px;padding:4px 5px;background:var(--card);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;gap:2px}
+    .cal-cell.empty{border:0;background:transparent;cursor:default}
+    .cal-cell.today{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+    .cal-daynum{font-size:11px;font-weight:700;color:var(--muted)}
+    .cal-cell.today .cal-daynum{color:var(--gold)}
+    .cal-meal{font-size:10.5px;line-height:1.25;color:var(--ink);word-break:break-word;overflow:hidden}
+    .cal-cell:hover{background:var(--bg)}
+    @media(max-width:620px){ .cal-cell{min-height:52px} .cal-meal{font-size:9px} }
     .coach{position:fixed;z-index:9200;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px rgba(0,0,0,.24)}
     .coach-body{font-size:13px;line-height:1.5}
     .coach-row{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:10px}
@@ -432,6 +446,7 @@
       <div class="view-head"><h2>Kitchen</h2></div>
       <nav class="subtabs">
         <button data-s="pane-meals" class="active">Meals</button>
+        <button data-s="pane-calendar">Calendar</button>
         <button data-s="pane-recipes">Recipes</button>
         <button data-s="pane-groceries">Groceries</button>
       </nav>
@@ -447,6 +462,10 @@
         </div>
         <p class="muted small" style="margin:0 0 14px">Everything this week's dinners need, minus what's already in the pantry. Tick items off as you shop.</p>
         <div id="groceryContent"></div>
+      </div>
+      <div class="pane" id="pane-calendar">
+        <p class="muted small" style="margin:0 0 12px">Plan dinners across the month. Tap any day to set it.</p>
+        <div id="calContent"></div>
       </div>
       <div class="pane" id="pane-recipes">
         <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-gold btn-sm" id="rc-new">+ Add recipe</button></div>
@@ -528,7 +547,7 @@ let MEMBERS = [];
 let MY_ID = null;
 let TASKFILTER = (localStorage.getItem("hb_taskfilter")||"all");
 let ASSIGN = null;
-let DATA = {task_comments:[],recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[],grocery_list:[]};
+let DATA = {task_comments:[],recurring_tasks:[],reminders:[],pantry_items:[],freezer_meals:[],recipes:[],meal_plan:[],task_templates:[],handyman_tasks:[],meal_rotation:[],meal_history:[],weekly_tasks:[],grocery_list:[],meal_calendar:[]};
 
 /* grocery store favorites (per-device preference) */
 /* Stores verified to exist on Instacart (checked live). Whole Foods and Trader Joe's
@@ -1474,6 +1493,83 @@ function watchMealOrder(){
   new MutationObserver(function(){ orderMealDays(); }).observe(pane, { childList: true, subtree: true });
 }
 
+
+/* ---------- Monthly meal calendar (dated, single source of truth) ---------- */
+const MC_DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+function mcIso(d){ const x = new Date(d); return x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); }
+function mcSunday(d){ const x = new Date(d || Date.now()); x.setHours(0,0,0,0); x.setDate(x.getDate() - x.getDay()); return x; }
+function mealForDate(iso){ return (DATA.meal_calendar || []).find(function(m){ return m.date === iso; }); }
+function weekdayDate(dayName){ const sun = mcSunday(new Date()); const i = MC_DAYS.indexOf(dayName); const d = new Date(sun); d.setDate(sun.getDate() + i); return mcIso(d); }
+function projectMealWeek(){
+  const sun = mcSunday(new Date());
+  DATA.meal_plan = MC_DAYS.map(function(nm, i){
+    const d = new Date(sun); d.setDate(sun.getDate() + i);
+    const iso = mcIso(d); const r = mealForDate(iso);
+    return { day: nm, meal_text: r ? r.meal_text : "", meal_type: "", date: iso };
+  });
+}
+async function setMealFor(iso, text){
+  await sb.from("meal_calendar").upsert({ household_id: CURRENT_HH, date: iso, meal_text: text || "", updated_at: new Date().toISOString() }, { onConflict: "household_id,date" });
+  let r = mealForDate(iso);
+  if(r) r.meal_text = text || ""; else (DATA.meal_calendar = DATA.meal_calendar || []).push({ household_id: CURRENT_HH, date: iso, meal_text: text || "" });
+  render();
+}
+let CAL_MONTH = null;
+function calMonth(){ if(!CAL_MONTH){ const n = new Date(); CAL_MONTH = new Date(n.getFullYear(), n.getMonth(), 1); } return CAL_MONTH; }
+function paintCalendar(){
+  const host = document.getElementById("calContent");
+  if(!host) return;
+  host.innerHTML = "";
+  const first = calMonth(); const y = first.getFullYear(), mo = first.getMonth();
+  const head = el("div","cal-head","");
+  const prev = el("button","cal-nav","\u2039"); prev.onclick = function(){ CAL_MONTH = new Date(y, mo-1, 1); paintCalendar(); };
+  const next = el("button","cal-nav","\u203A"); next.onclick = function(){ CAL_MONTH = new Date(y, mo+1, 1); paintCalendar(); };
+  head.appendChild(prev);
+  head.appendChild(el("div","cal-title", first.toLocaleString("default", { month:"long", year:"numeric" })));
+  head.appendChild(next);
+  host.appendChild(head);
+  const dow = el("div","cal-dow","");
+  ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(function(w){ dow.appendChild(el("div","cal-dow-c", w)); });
+  host.appendChild(dow);
+  const grid = el("div","cal-grid","");
+  const pad = new Date(y, mo, 1).getDay();
+  const dim = new Date(y, mo+1, 0).getDate();
+  const todayIso = mcIso(new Date());
+  for(let i = 0; i < pad; i++) grid.appendChild(el("div","cal-cell empty",""));
+  for(let d = 1; d <= dim; d++){
+    const iso = mcIso(new Date(y, mo, d));
+    const cell = el("div","cal-cell" + (iso === todayIso ? " today" : ""), "");
+    cell.appendChild(el("div","cal-daynum", String(d)));
+    const r = mealForDate(iso);
+    cell.appendChild(el("div","cal-meal", r && r.meal_text ? r.meal_text : ""));
+    cell.onclick = function(){ openMealEditor(iso); };
+    grid.appendChild(cell);
+  }
+  host.appendChild(grid);
+}
+function openMealEditor(iso){
+  const r = mealForDate(iso);
+  const ov = el("div","modal-ov",""); const card = el("div","modal","");
+  const dt = new Date(iso + "T12:00:00");
+  card.appendChild(el("h3","", dt.toLocaleDateString("default", { weekday:"long", month:"long", day:"numeric" })));
+  const ta = document.createElement("textarea");
+  ta.className = "rsearch"; ta.style.minHeight = "70px"; ta.placeholder = "What's for dinner?";
+  ta.value = r && r.meal_text ? r.meal_text : "";
+  card.appendChild(ta);
+  const quick = el("div","tag-row","");
+  ["\uD83C\uDF7D\uFE0F Eating out","\uD83E\uDD61 Takeout","\u267B\uFE0F Leftovers","\uD83E\uDD63 Fend for yourself","\uD83C\uDF19 Night off"].forEach(function(o){
+    const b = el("button","rchip", o); b.onclick = function(){ ta.value = o; }; quick.appendChild(b);
+  });
+  card.appendChild(quick);
+  const acts = el("div","modal-actions","");
+  const clear = el("button","btn btn-ghost","Clear"); clear.onclick = async function(){ await setMealFor(iso, ""); ov.remove(); paintCalendar(); };
+  const save = el("button","btn btn-gold","Save"); save.onclick = async function(){ await setMealFor(iso, ta.value.trim()); ov.remove(); paintCalendar(); };
+  acts.appendChild(clear); acts.appendChild(save);
+  card.appendChild(acts);
+  ov.appendChild(card); ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+
 function renderMeal(){
   const wrap=$("#mealContent"); if(!wrap) return; wrap.innerHTML="";
   // rotation
@@ -1573,11 +1669,13 @@ async function archiveWeek(){
   renderMeal(); toast("This week saved to history.");
   for(const c of freq){ if(confirm(`You've planned "${c.text}" ${c.weeks.size} weeks — add it to your rotation?`)) await saveMealToRotation(c.text); }
 }
-async function saveMeal(day,text){
-  const existing=DATA.meal_plan.find(x=>x.day===day);
-  if(existing){ await sb.from("meal_plan").update({meal_text:text}).eq("id",existing.id); existing.meal_text=text; }
-  else { const {data}=await sb.from("meal_plan").insert({day,meal_text:text}).select(); if(data)DATA.meal_plan.push(data[0]); }
-  renderToday(); renderMeal();
+async function saveMeal(day, text){
+  const iso = weekdayDate(day);
+  await sb.from("meal_calendar").upsert({ household_id: CURRENT_HH, date: iso, meal_text: text || "", updated_at: new Date().toISOString() }, { onConflict: "household_id,date" });
+  let r = mealForDate(iso);
+  if(r) r.meal_text = text || ""; else (DATA.meal_calendar = DATA.meal_calendar || []).push({ household_id: CURRENT_HH, date: iso, meal_text: text || "" });
+  projectMealWeek();
+  render();
 }
 $("#mp-suggest").onclick=async()=>{
   const pool=[...DATA.freezer_meals.filter(f=>f.qty>0).map(f=>"🧊 "+f.name), ...DATA.recipes.map(r=>r.title)];
@@ -2990,7 +3088,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 26";
+const BUILD_ID = "build 27";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4152,6 +4250,7 @@ function applyTaskFilter(){
 }
 const __render0 = render;
 render = function(){
+    try{ projectMealWeek(); }catch(e){}
   try{ if(DATA.meal_plan) DATA.meal_plan.sort(function(a,b){ return DAYS.indexOf(a.day) - DAYS.indexOf(b.day); }); }catch(e){}
   const out = __render0.apply(this, arguments);
   try{ quickAddBar(); }catch(e){}
@@ -4171,6 +4270,7 @@ render = function(){
   try{ stampMealDates(); }catch(e){}
   try{ orderMealDays(); }catch(e){}
   try{ watchMealOrder(); }catch(e){}
+  try{ paintCalendar(); }catch(e){}
   return out;
 };
 
