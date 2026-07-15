@@ -230,17 +230,25 @@
     .cal-grid{display:grid;grid-template-columns:30px repeat(7,1fr);gap:4px}
     .cal-week-btn{border:1px solid var(--line);background:var(--card);border-radius:9px;cursor:pointer;font-size:18px;color:var(--teal);display:flex;align-items:center;justify-content:center;padding:0}
     .cal-week-btn:hover{background:var(--teal);color:#fff}
-    .wk-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-    .wk-day{width:74px;flex:0 0 auto;font-size:12px;font-weight:700;color:var(--teal-d)}
-    .wk-ta{flex:1 1 auto;min-width:0;resize:none;font-family:inherit;font-size:13px;line-height:1.35;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
+    .pw-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+    .pw-day{width:74px;flex:0 0 auto;font-size:12px;font-weight:700;color:var(--teal-d)}
+    .pw-ta{flex:1 1 auto;min-width:0;resize:none;font-family:inherit;font-size:13px;line-height:1.35;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink)}
     .cal-cell{min-height:64px;border:1px solid var(--line);border-radius:9px;padding:4px 5px;background:var(--card);cursor:pointer;overflow:hidden;display:flex;flex-direction:column;gap:2px}
     .cal-cell.empty{border:0;background:transparent;cursor:default}
     .cal-cell.today{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
     .cal-daynum{font-size:11px;font-weight:700;color:var(--muted)}
     .cal-cell.today .cal-daynum{color:var(--gold)}
-    .cal-meal{font-size:10.5px;line-height:1.25;color:var(--ink);word-break:break-word;overflow:hidden}
+    .cal-meal{font-size:11px;line-height:1.3;color:var(--ink);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:normal;overflow-wrap:break-word}
+    .cal-dot{display:none;width:6px;height:6px;border-radius:50%;background:var(--teal);margin-top:3px}
     .cal-cell:hover{background:var(--bg)}
-    @media(max-width:620px){ .cal-cell{min-height:52px} .cal-meal{font-size:9px} }
+    @media(max-width:620px){
+      .cal-cell{min-height:46px;padding:4px}
+      .cal-meal{display:none}
+      .cal-dot{display:block}
+      .cal-daynum{font-size:12px}
+      .cal-grid,.cal-dow{grid-template-columns:22px repeat(7,1fr);gap:3px}
+      .cal-week-btn{font-size:15px}
+    }
     .coach{position:fixed;z-index:9200;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px rgba(0,0,0,.24)}
     .coach-body{font-size:13px;line-height:1.5}
     .coach-row{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:10px}
@@ -1536,10 +1544,10 @@ function planWeek(sunday){
   const tas = [];
   days.forEach(function(d){
     const iso = mcIso(d); const r = mealForDate(iso);
-    const row = el("div","wk-row","");
-    row.appendChild(el("div","wk-day", d.toLocaleDateString("default",{weekday:"short"}) + " " + (d.getMonth()+1) + "/" + d.getDate()));
+    const row = el("div","pw-row","");
+    row.appendChild(el("div","pw-day", d.toLocaleDateString("default",{weekday:"short"}) + " " + (d.getMonth()+1) + "/" + d.getDate()));
     const ta = document.createElement("textarea");
-    ta.className = "wk-ta"; ta.rows = 1; ta.placeholder = "What's for dinner?";
+    ta.className = "pw-ta"; ta.rows = 1; ta.placeholder = "What's for dinner?";
     ta.value = r && r.meal_text ? r.meal_text : "";
     row.appendChild(ta); tas.push({ iso: iso, ta: ta, orig: (r && r.meal_text) ? r.meal_text : "" });
     card.appendChild(row);
@@ -1595,10 +1603,12 @@ function paintCalendar(){
       const dayNum = (w*7 + dcol) - pad + 1;
       if(dayNum < 1 || dayNum > dim){ grid.appendChild(el("div","cal-cell empty","")); continue; }
       const iso = mcIso(new Date(y, mo, dayNum));
-      const cell = el("div","cal-cell" + (iso === todayIso ? " today" : ""), "");
-      cell.appendChild(el("div","cal-daynum", String(dayNum)));
       const r = mealForDate(iso);
-      cell.appendChild(el("div","cal-meal", r && r.meal_text ? r.meal_text : ""));
+      const has = !!(r && r.meal_text);
+      const cell = el("div","cal-cell" + (iso === todayIso ? " today" : "") + (has ? " has-meal" : ""), "");
+      cell.appendChild(el("div","cal-daynum", String(dayNum)));
+      cell.appendChild(el("div","cal-meal", has ? r.meal_text : ""));
+      if(has) cell.appendChild(el("div","cal-dot",""));
       cell.onclick = function(){ openMealEditor(iso); };
       grid.appendChild(cell);
     }
@@ -3146,7 +3156,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 29";
+const BUILD_ID = "build 30";
 let SCAN = null;
 let BARCODE_COL = null;
 
