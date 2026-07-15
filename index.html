@@ -1442,6 +1442,24 @@ $("#rc-save").onclick=async()=>{
 };
 
 /* MEAL PLAN + ROTATION + HISTORY */
+/* Meal rows always read in calendar order — Friday stays after Thursday, no matter
+   what an edit or a stale render left in the DOM. Sorts by the stamped M/D date. */
+function orderMealDays(){
+  const pane = document.getElementById("pane-meals");
+  if(!pane) return;
+  const rows = [...pane.querySelectorAll(".mealday")];
+  if(rows.length < 2) return;
+  const parent = rows[0].parentNode;
+  const key = function(node){
+    const lab = ((node.querySelector(".d") || {}).textContent || "").trim();
+    const m = lab.match(/(\d{1,2})\/(\d{1,2})/);
+    if(m) return parseInt(m[1],10) * 100 + parseInt(m[2],10);
+    return 9999;
+  };
+  rows.slice().sort(function(a,b){ return key(a) - key(b); })
+      .forEach(function(n){ parent.appendChild(n); });
+}
+
 function renderMeal(){
   const wrap=$("#mealContent"); if(!wrap) return; wrap.innerHTML="";
   // rotation
@@ -2958,7 +2976,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 23";
+const BUILD_ID = "build 24";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4137,6 +4155,7 @@ render = function(){
   }catch(e){}
   try{ clearTimeout(window.__ct); window.__ct = setTimeout(maybeCoach, 900); }catch(e){}
   try{ stampMealDates(); }catch(e){}
+  try{ orderMealDays(); }catch(e){}
   return out;
 };
 
