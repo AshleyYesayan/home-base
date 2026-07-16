@@ -1482,6 +1482,24 @@ $("#rc-save").onclick=async()=>{
 /* MEAL PLAN + ROTATION + HISTORY */
 /* Meal rows always read in calendar order — Friday stays after Thursday, no matter
    what an edit or a stale render left in the DOM. Sorts by the stamped M/D date. */
+/* Recurring-task preview only shows the day that's due today (hidden otherwise). */
+function filterRecurringDays(){
+  const NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+  const today = NAMES[new Date().getDay()];
+  document.querySelectorAll("#view-today .card").forEach(function(card){
+    const h = card.querySelector("h3");
+    if(!h || !/Recurring task days/i.test(h.textContent)) return;
+    let shown = 0;
+    card.querySelectorAll(".row").forEach(function(row){
+      const t = ((row.querySelector(".title") || {}).textContent || "").toLowerCase();
+      const isToday = t.indexOf(today) > -1;
+      row.style.display = isToday ? "" : "none";
+      if(isToday) shown++;
+    });
+    card.style.display = shown > 0 ? "" : "none";
+  });
+}
+
 function orderWeekBlocks(){
   const host = document.getElementById("weekContent");
   if(!host) return;
@@ -3167,7 +3185,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 34";
+const BUILD_ID = "build 35";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4504,6 +4522,7 @@ render = function(){
   try{ watchMealOrder(); }catch(e){}
   try{ paintCalendar(); }catch(e){}
   try{ orderWeekBlocks(); }catch(e){}
+  try{ filterRecurringDays(); }catch(e){}
   return out;
 };
 
