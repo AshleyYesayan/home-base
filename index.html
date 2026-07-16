@@ -955,8 +955,8 @@ function renderToday(){
     tasks:    "✅ "+tn+"'s tasks" + (_tt.length ? `  ${_dn} of ${_tt.length} done` : ""),
     week:     "📌 This week",
     upkeep:   "🔔 Upkeep due soon",
-    restock:  "🛒 Restock list",
-    freezer:  "🧊 Freezer running low",
+    restock:  "🛒 Grocery Restock List",
+    freezer:  "🧊 Freezer Restock List",
     upcoming: "📅 Upcoming"
   };
   const bare = { week:true, upcoming:true };
@@ -1186,7 +1186,7 @@ function renderPantry(){
   const cats=[...new Set(DATA.pantry_items.map(p=>p.category||"Other"))].sort();
   const low=DATA.pantry_items.filter(belowPar);
   // grocery store selector
-  const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Restock list "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
+  const rc=el("div","card"); rc.appendChild(el("h3",null,"🛒 Grocery Restock List "+(low.length?`<span class="pill bad">${low.length}</span>`:"")));
   if(low.length) rc.appendChild(el("div","legend","🛒 open at Instacart  ·  📦 Amazon  ·  🔎 find & link it"));
   if(low.length===0) rc.appendChild(el("div","empty","All stocked to par."));
   low.forEach(p=>{
@@ -3156,7 +3156,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 30";
+const BUILD_ID = "build 31";
 let SCAN = null;
 let BARCODE_COL = null;
 
