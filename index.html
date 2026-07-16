@@ -1505,9 +1505,19 @@ function orderWeekBlocks(){
   if(!host) return;
   const cards = [...host.querySelectorAll(":scope > .card")];
   if(cards.length < 2) return;
-  const anytime = cards.find(function(c){ const h = c.querySelector("h3"); return h && /Anytime this week/i.test(h.textContent); });
-  if(!anytime || cards[0] === anytime) return;
-  host.insertBefore(anytime, cards[0]);
+  const rank = function(c){
+    const h = ((c.querySelector("h3") || {}).textContent || "").toLowerCase();
+    if(h.indexOf("anytime this week") > -1) return 0;
+    if(h.indexOf("weekday") > -1) return 1;
+    if(h.indexOf("weekend") > -1) return 2;
+    if(h.indexOf("next week") > -1) return 4;
+    return 3;
+  };
+  const sorted = cards.slice().sort(function(a,b){ return rank(a) - rank(b); });
+  let changed = false;
+  for(let i = 0; i < cards.length; i++){ if(cards[i] !== sorted[i]){ changed = true; break; } }
+  if(!changed) return;
+  sorted.forEach(function(c){ host.appendChild(c); });
 }
 
 function orderMealDays(){
@@ -3185,7 +3195,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 36";
+const BUILD_ID = "build 37";
 let SCAN = null;
 let BARCODE_COL = null;
 
