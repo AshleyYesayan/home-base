@@ -2688,7 +2688,7 @@ function quickAddBar(){
 
   const inp = document.createElement("input");
   inp.className = "qa-in";
-  inp.placeholder = "Add anything — “water orchids every Sunday”, “call plumber Friday for Mourad”";
+  inp.placeholder = "Add anything — “water orchids every Sunday”, “call electrician Friday for Mourad”";
 
   const mic = el("button","qa-mic","🎤");
   mic.title = "Say it instead";
@@ -3185,7 +3185,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 35";
+const BUILD_ID = "build 36";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -3540,6 +3540,20 @@ function hbMyOpenTasks(){
     .concat((DATA.handyman_tasks || []).filter(function(t){ return !t.done && mine(t); }))
     .concat((DATA.recurring_tasks|| []).filter(function(t){ return mine(t) && t.done_date !== todayStr(); }));
 }
+(function(){
+  if(typeof hbMyOpenTasks === "function" && !hbMyOpenTasks.__dayfx){
+    const _hb = hbMyOpenTasks;
+    hbMyOpenTasks = function(){
+      const today = todayName();
+      return _hb.apply(this, arguments).filter(function(t){
+        if(("done_date" in t) && t.day && t.day !== today) return false;
+        return true;
+      });
+    };
+    hbMyOpenTasks.__dayfx = 1;
+  }
+})();
+
 function buildReview(c){
   const mineTasks = hbMyOpenTasks();
   const low = (DATA.pantry_items || []).filter(function(p){ return p.count < p.par; });
