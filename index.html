@@ -193,8 +193,9 @@
     .gl-count{flex:1 1 100%}
     .gl-ic{background:#0AAD0A;color:#fff;border:0}
     .gl-ic:hover{background:#0a8f0a}
-    .gl-done{display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(90deg,rgba(240,187,43,.16),transparent);border:1px solid var(--gold);border-radius:12px;padding:12px 14px;margin-bottom:12px}
-    .gl-done-msg{font-weight:800;font-size:13.5px}
+    .gl-done{display:flex;align-items:center;justify-content:space-between;gap:10px;background:linear-gradient(90deg,rgba(10,173,10,.16),transparent);border:1px solid #0AAD0A;border-radius:12px;padding:12px 14px;margin-bottom:12px;animation:gl-pop .5s ease}
+    @keyframes gl-pop{0%{transform:scale(.92);opacity:0}60%{transform:scale(1.03)}100%{transform:scale(1);opacity:1}}
+    .gl-done-msg{font-weight:800;font-size:13.5px;color:#0a7a0a}
     .gl-count{font-size:13px;font-weight:700;color:var(--muted)}
     .gl-row .sub{font-size:11px}
     .gl-row.got .title{text-decoration:line-through;opacity:.5}
@@ -3156,7 +3157,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 31";
+const BUILD_ID = "build 32";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -3810,10 +3811,49 @@ async function addGroceryItem(text){
   render();
 }
 
+/* full-screen confetti burst, self-contained (no CDN) */
+function fireConfetti(){
+  const cv = document.createElement("canvas");
+  cv.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:99999";
+  document.body.appendChild(cv);
+  const ctx = cv.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const colors = ["#F0BB2B","#5FA2AA","#0AAD0A","#e8582f","#7b5fd0","#e63e6d","#2ea1ff"];
+  const parts = [];
+  for(let i = 0; i < 180; i++){
+    parts.push({
+      x: Math.random() * innerWidth,
+      y: -20 - Math.random() * innerHeight * 0.6,
+      w: 6 + Math.random() * 7, h: 8 + Math.random() * 9,
+      color: colors[(Math.random() * colors.length) | 0],
+      vx: (Math.random() - 0.5) * 3, vy: 2 + Math.random() * 4,
+      rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.35, sway: Math.random() * 6
+    });
+  }
+  const t0 = performance.now();
+  (function frame(now){
+    const e = now - t0;
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for(const p of parts){
+      p.vy += 0.05; p.x += p.vx + Math.sin(now / 300 + p.sway) * 0.9; p.y += p.vy; p.rot += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.globalAlpha = e > 2200 ? Math.max(0, 1 - (e - 2200) / 900) : 1;
+      ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+    }
+    if(e < 3100) requestAnimationFrame(frame); else cv.remove();
+  })(t0);
+}
+
 async function toggleGrocery(g){
+  const week = thisWeekStart();
+  const list = (DATA.grocery_list || []).filter(function(x){ return x.week_start === week; });
+  const wasAllDone = list.length > 0 && list.every(function(x){ return x.got; });
   g.got = !g.got;
   await sb.from("grocery_list").update({ got: g.got }).eq("id", g.id);
+  const isAllDone = list.length > 0 && list.every(function(x){ return x.got; });
   render();
+  if(!wasAllDone && isAllDone){ try{ fireConfetti(); }catch(e){} }
 }
 
 /* clean a recipe line into an Instacart-matchable product name */
@@ -3938,7 +3978,7 @@ function paintGroceries(){
   head.appendChild(freshBtn);
   if(left === 0 && items.length){
     const doneBanner = el("div","gl-done","");
-    doneBanner.appendChild(el("span","gl-done-msg","🎉 All checked off — nice work."));
+    doneBanner.appendChild(el("span","gl-done-msg","\u2705 Done — everything\u2019s checked off!"));
     const newBtn = el("button","btn btn-gold btn-sm","Start a new list");
     newBtn.onclick = function(){ newGroceryList(); };
     doneBanner.appendChild(newBtn);
