@@ -250,6 +250,10 @@
       .cal-grid,.cal-dow{grid-template-columns:22px repeat(7,1fr);gap:3px}
       .cal-week-btn{font-size:15px}
     }
+    .stock-pill{display:inline-block;margin-top:5px;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid var(--line);background:var(--bg);color:var(--muted)}
+    .stock-pill.pill-good{background:rgba(95,162,170,.14);border-color:var(--teal);color:var(--teal-d)}
+    .stock-pill.pill-low{background:rgba(240,187,43,.18);border-color:var(--gold);color:#8a6d12}
+    .restock-bought{margin-right:6px}
     .coach{position:fixed;z-index:9200;background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);border-radius:14px;padding:12px 14px;box-shadow:0 14px 40px rgba(0,0,0,.24)}
     .coach-body{font-size:13px;line-height:1.5}
     .coach-row{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:10px}
@@ -1483,6 +1487,39 @@ $("#rc-save").onclick=async()=>{
 /* Meal rows always read in calendar order — Friday stays after Thursday, no matter
    what an edit or a stale render left in the DOM. Sorts by the stamped M/D date. */
 /* Recurring-task preview only shows the day that's due today (hidden otherwise). */
+function pillifyStock(){
+  ["pane-supplies","pane-freezer"].forEach(function(pid){
+    const pane = document.getElementById(pid);
+    if(!pane) return;
+    pane.querySelectorAll(".grow > .sub").forEach(function(sub){
+      const txt = (sub.textContent || "").trim().toLowerCase();
+      sub.classList.add("stock-pill");
+      sub.classList.remove("pill-good","pill-low");
+      if(txt === "stocked") sub.classList.add("pill-good");
+      else if(txt.indexOf("buy ") === 0 || txt.indexOf("low") > -1) sub.classList.add("pill-low");
+    });
+  });
+}
+
+function addRestockBought(){
+  [...document.querySelectorAll("#pane-supplies .card")].forEach(function(card){
+    const h = card.querySelector("h3");
+    if(!h || !/Grocery Restock List/i.test(h.textContent)) return;
+    card.querySelectorAll(".row").forEach(function(row){
+      if(row.querySelector(".restock-bought")) return;
+      const name = ((row.querySelector(".title") || {}).textContent || "").trim();
+      const p = (DATA.pantry_items || []).find(function(x){ return x.name === name; });
+      if(!p) return;
+      const grow = row.querySelector(".grow");
+      const grp = grow ? grow.nextElementSibling : null;
+      const b = el("button","btn btn-sm btn-gold restock-bought","\u2713 Bought");
+      b.title = "Mark bought — set quantity, updates your stock";
+      b.onclick = function(e){ e.stopPropagation(); askBought(p, b); };
+      if(grp) grp.insertBefore(b, grp.firstChild); else row.appendChild(b);
+    });
+  });
+}
+
 function filterRecurringDays(){
   const NAMES = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
   const today = NAMES[new Date().getDay()];
@@ -3195,7 +3232,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 37";
+const BUILD_ID = "build 38";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4547,6 +4584,8 @@ render = function(){
   try{ paintCalendar(); }catch(e){}
   try{ orderWeekBlocks(); }catch(e){}
   try{ filterRecurringDays(); }catch(e){}
+  try{ pillifyStock(); }catch(e){}
+  try{ addRestockBought(); }catch(e){}
   return out;
 };
 
