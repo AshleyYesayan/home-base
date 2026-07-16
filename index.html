@@ -727,7 +727,7 @@ $("#googleBtn").onclick = async ()=>{
   $("#loginMsg").style.color="var(--muted)"; $("#loginMsg").textContent="Opening Google…";
   const {error} = await sb.auth.signInWithOAuth({
     provider:"google",
-    options:{ redirectTo: location.origin + location.pathname }
+    options:{ redirectTo: location.origin + location.pathname, queryParams: { prompt: "select_account" } }
   });
   if(error){ $("#googleBtn").disabled=false; $("#loginMsg").style.color="var(--bad)"; $("#loginMsg").textContent=error.message; }
 };
@@ -1701,7 +1701,7 @@ function openMealEditor(iso){
   ta.value = r && r.meal_text ? r.meal_text : "";
   card.appendChild(ta);
   const quick = el("div","tag-row","");
-  ["\uD83C\uDF7D\uFE0F Eating out","\uD83E\uDD61 Takeout","\u267B\uFE0F Leftovers","\uD83E\uDD63 Fend for yourself","\uD83C\uDF19 Night off"].forEach(function(o){
+  ["\uD83C\uDF7D\uFE0F Eating out","\uD83E\uDD61 Takeout","\u267B\uFE0F Leftovers","\uD83E\uDD63 Fend for yourself","\uD83E\uDDF3 Out of town","\uD83C\uDF19 Night off"].forEach(function(o){
     const b = el("button","rchip", o); b.onclick = function(){ ta.value = o; }; quick.appendChild(b);
   });
   card.appendChild(quick);
@@ -3232,7 +3232,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 38";
+const BUILD_ID = "build 39";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4321,6 +4321,7 @@ const NIGHT_OFF = [
   { v:"🥡 Takeout",           h:"Ordering in." },
   { v:"♻️ Leftovers",         h:"Last night, round two." },
   { v:"🥣 Fend for yourself", h:"Everyone raids the fridge." },
+  { v:"🧳 Out of town", h:"Away — no cooking needed." },
   { v:"🌙 Night off",         h:"Nothing planned, and that's fine." }
 ];
 function isNightOff(v){
