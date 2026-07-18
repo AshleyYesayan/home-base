@@ -2184,7 +2184,7 @@ function paintWeek(wrap){
   }
 }
 
-async function toggleWeekly(t,done){ await sb.from("weekly_tasks").update({done}).eq("id",t.id); t.done=done; renderWeekly(); renderToday(); }
+async function toggleWeekly(t,done){ const nd=(done===undefined)?!t.done:!!done; t.done=nd; render(); const{error}=await sb.from("weekly_tasks").update({done:nd}).eq("id",t.id); if(error){ t.done=!nd; render(); toast("Update failed — "+error.message); return; } await refresh("weekly_tasks"); render(); }
 
 /* HANDYMAN */
 function renderHandyman(){
@@ -2212,7 +2212,7 @@ function renderHandyman(){
     wrap.appendChild(dc);
   }
 }
-async function toggleHandyman(t,done){ await sb.from("handyman_tasks").update({done}).eq("id",t.id); t.done=done; renderHandyman(); }
+async function toggleHandyman(t,done){ const nd=(done===undefined)?!t.done:!!done; t.done=nd; render(); const{error}=await sb.from("handyman_tasks").update({done:nd}).eq("id",t.id); if(error){ t.done=!nd; render(); toast("Update failed — "+error.message); return; } await refresh("handyman_tasks"); render(); }
 
 /* TASK TEMPLATE + REFRESH */
 async function saveTemplate(){
@@ -3232,7 +3232,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 39";
+const BUILD_ID = "build 40";
 let SCAN = null;
 let BARCODE_COL = null;
 
