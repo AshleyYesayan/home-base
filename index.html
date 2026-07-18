@@ -3232,7 +3232,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 40";
+const BUILD_ID = "build 41";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -3935,27 +3935,14 @@ function fireConfetti(){
 }
 
 /* Confetti on every task completion — only on the not-done -> done transition. */
-(function wireConfetti(){
-  if(typeof toggleTask === "function" && !toggleTask.__cf){
-    const _f = toggleTask;
-    toggleTask = function(t){ const was = !!(t && t.done_date); const r = _f.apply(this, arguments); if(!was){ try{ fireConfetti(); }catch(e){} } return r; };
-    toggleTask.__cf = 1;
-  }
-  if(typeof toggleWeekly === "function" && !toggleWeekly.__cf){
-    const _f = toggleWeekly;
-    toggleWeekly = function(t, done){ const nd = (done === undefined) ? !(t && t.done) : !!done; const r = _f.apply(this, arguments); if(nd){ try{ fireConfetti(); }catch(e){} } return r; };
-    toggleWeekly.__cf = 1;
-  }
-  if(typeof toggleHandyman === "function" && !toggleHandyman.__cf){
-    const _f = toggleHandyman;
-    toggleHandyman = function(t, done){ const nd = (done === undefined) ? !(t && t.done) : !!done; const r = _f.apply(this, arguments); if(nd){ try{ fireConfetti(); }catch(e){} } return r; };
-    toggleHandyman.__cf = 1;
-  }
-  if(typeof markReminder === "function" && !markReminder.__cf){
-    const _f = markReminder;
-    markReminder = function(){ const r = _f.apply(this, arguments); try{ fireConfetti(); }catch(e){} return r; };
-    markReminder.__cf = 1;
-  }
+(function(){
+  function boom(){ try{ fireConfetti(); }catch(_e){} }
+  var _tt=toggleTask, _tw=toggleWeekly, _th=toggleHandyman;
+  var _mr=(typeof markReminder==="function")?markReminder:null;
+  toggleTask=function(t){ var wasToday=!!(t && t.done_date===todayStr()); _tt.apply(this,arguments); if(!wasToday) boom(); };
+  toggleWeekly=function(t,done){ var nd=(done===undefined)?!(t&&t.done):!!done; _tw.apply(this,arguments); if(nd) boom(); };
+  toggleHandyman=function(t,done){ var nd=(done===undefined)?!(t&&t.done):!!done; _th.apply(this,arguments); if(nd) boom(); };
+  if(_mr){ markReminder=function(){ _mr.apply(this,arguments); boom(); }; }
 })();
 
 async function toggleGrocery(g){
