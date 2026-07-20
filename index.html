@@ -3227,7 +3227,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 44";
+const BUILD_ID = "build 45";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4588,6 +4588,47 @@ try{window.HB_getData=function(t){try{return DATA[t]||[]}catch(e){return []}};}c
   function schedule(){ clearTimeout(tmr); tmr=setTimeout(run,150); }
   function boot(){ obs=new MutationObserver(schedule); obs.observe(document.body,{childList:true,subtree:true}); run(); }
   if(document.readyState==='loading'){ window.addEventListener('load',function(){ setTimeout(boot,400); }); } else { setTimeout(boot,400); }
+})();
+</script>
+<script>
+(function(){
+  "use strict";
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function addDays(iso,n){ var d=new Date(iso+'T00:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function fmt(iso){ var d=new Date(iso+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+  var selWeek=null;
+  function weekOptions(){ var base=(typeof weekKey==='function')?weekKey():null; if(!base) return []; var o=[]; for(var i=1;i<=8;i++){ var iso=addDays(base,7*i); o.push({iso:iso,label:(i===1?'Next week':'Week of')+' \u00b7 '+fmt(iso)+' \u2013 '+fmt(addDays(iso,6))}); } return o; }
+  function build(){
+    var wc=document.getElementById('weekContent'); if(!wc) return; var parent=wc.parentElement; if(!parent) return;
+    var opts=weekOptions(); if(!opts.length) return; if(!selWeek) selWeek=opts[0].iso;
+    var box=document.getElementById('hb-plan-ahead'); var isNew=!box; if(isNew){ box=document.createElement('div'); box.id='hb-plan-ahead'; box.className='card'; box.style.cssText='margin:0 0 14px;padding:14px'; }
+    box.innerHTML='';
+    var h=document.createElement('div'); h.style.cssText='font-weight:800;color:#5FA2AA;margin-bottom:8px'; h.textContent='\uD83D\uDCC5 Plan a future week'; box.appendChild(h);
+    var sel=document.createElement('select'); sel.style.cssText='width:100%;padding:9px;border:1px solid #e7e3da;border-radius:10px;margin-bottom:10px;font-family:inherit;font-size:14px';
+    opts.forEach(function(o){ var op=document.createElement('option'); op.value=o.iso; op.textContent=o.label; if(o.iso===selWeek)op.selected=true; sel.appendChild(op); });
+    sel.onchange=function(){ selWeek=sel.value; build(); };
+    box.appendChild(sel);
+    var g=(typeof weekTasks==='function')?weekTasks(selWeek):{}; var all=[].concat(g.weekday||[],g.weekend||[],g.any||[]).filter(function(t){return t&&!t.done;});
+    var list=document.createElement('div'); list.style.cssText='margin-bottom:10px';
+    if(all.length){ all.forEach(function(t){ var r=document.createElement('div'); r.style.cssText='font-size:14px;padding:3px 0'; r.textContent='\u2022 '+(t.day?t.day+': ':'')+(t.task||''); list.appendChild(r); }); }
+    else { var e=document.createElement('div'); e.style.cssText='font-size:13px;color:#6b7785'; e.textContent='Nothing planned yet \u2014 add below.'; list.appendChild(e); }
+    box.appendChild(list);
+    var row=document.createElement('div'); row.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
+    var ti=document.createElement('input'); ti.type='text'; ti.placeholder='Add a task\u2026'; ti.style.cssText='flex:1 1 140px;min-width:120px;padding:9px;border:1px solid #e7e3da;border-radius:10px;font-family:inherit;font-size:14px';
+    var ds=document.createElement('select'); ds.style.cssText='padding:9px;border:1px solid #e7e3da;border-radius:10px;font-family:inherit;font-size:14px';
+    [['','Any day'],['Monday','Mon'],['Tuesday','Tue'],['Wednesday','Wed'],['Thursday','Thu'],['Friday','Fri'],['Saturday','Sat'],['Sunday','Sun']].forEach(function(d){ var op=document.createElement('option'); op.value=d[0]; op.textContent=d[1]; ds.appendChild(op); });
+    var b=document.createElement('button'); b.textContent='Add'; b.style.cssText='background:#F0BB2B;border:0;border-radius:10px;padding:9px 18px;font-weight:700;cursor:pointer;font-family:inherit';
+    function doAdd(){ var v=ti.value.trim(); if(!v||typeof addToWeek!=='function') return; b.disabled=true; Promise.resolve(addToWeek(v, ds.value||null, selWeek)).then(function(){ ti.value=''; b.disabled=false; build(); var n=document.getElementById('hb-plan-ahead'); var inp=n&&n.querySelector('input'); if(inp) inp.focus(); }).catch(function(){ b.disabled=false; }); }
+    b.onclick=doAdd; ti.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); doAdd(); } };
+    row.appendChild(ti); row.appendChild(ds); row.appendChild(b);
+    box.appendChild(row);
+    if(isNew){ parent.insertBefore(box, wc); }
+  }
+  window.HB_planAhead=build;
+  function tick(){ try{ if(document.getElementById('weekContent') && !document.getElementById('hb-plan-ahead')){ build(); } }catch(e){} }
+  var obs=new MutationObserver(tick);
+  function boot(){ obs.observe(document.body,{childList:true,subtree:true}); tick(); }
+  if(document.readyState==='loading'){ window.addEventListener('load',function(){ setTimeout(boot,500); }); } else { setTimeout(boot,500); }
 })();
 </script>
 </body>
