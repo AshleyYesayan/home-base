@@ -1,5 +1,5 @@
 // Home Base service worker — always fetch fresh app code; cache only as an offline fallback.
-const CACHE = "homebase-v23";
+const CACHE = "homebase-v24";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
