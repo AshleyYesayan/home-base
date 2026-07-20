@@ -3227,7 +3227,7 @@ function installBanner(){
    BarcodeDetector, so we lazy-load ZXing for it.
    Barcode memory prefers a pantry_items.barcode column and silently falls back
    to per-device localStorage until that column exists. */
-const BUILD_ID = "build 45";
+const BUILD_ID = "build 46";
 let SCAN = null;
 let BARCODE_COL = null;
 
@@ -4574,7 +4574,7 @@ render = function(){
 
 function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 function escAttr(s){return esc(s).replace(/'/g,"&#39;");}
-try{window.HB_getData=function(t){try{return DATA[t]||[]}catch(e){return []}};}catch(e){}
+try{window.HB_getData=function(t){try{return DATA[t]||[]}catch(e){return []}};window.HB_sb=sb;}catch(e){}
 </script>
 <script>
 (function(){
@@ -4629,6 +4629,25 @@ try{window.HB_getData=function(t){try{return DATA[t]||[]}catch(e){return []}};}c
   var obs=new MutationObserver(tick);
   function boot(){ obs.observe(document.body,{childList:true,subtree:true}); tick(); }
   if(document.readyState==='loading'){ window.addEventListener('load',function(){ setTimeout(boot,500); }); } else { setTimeout(boot,500); }
+})();
+</script>
+<script>
+(function(){
+  "use strict";
+  function carry(){
+    try{
+      if(typeof weekKey!=='function' || !window.HB_getData || !window.HB_sb) return;
+      var cur=weekKey();
+      var rows=window.HB_getData('weekly_tasks')||[];
+      var overdue=rows.filter(function(t){ return t && !t.done && t.week_start && t.week_start < cur; });
+      if(!overdue.length) return;
+      var left=overdue.length;
+      overdue.forEach(function(t){
+        try{ window.HB_sb.from('weekly_tasks').update({week_start:cur, day:null, due_date:null}).eq('id',t.id).then(function(){ left--; if(left<=0){ try{ if(typeof refresh==='function'){ refresh('weekly_tasks').then(function(){ if(typeof render==='function') render(); }); } }catch(e){} } }); }catch(e){ left--; }
+      });
+    }catch(e){}
+  }
+  if(document.readyState==='loading'){ window.addEventListener('load',function(){ setTimeout(carry,1600); }); } else { setTimeout(carry,1600); }
 })();
 </script>
 </body>
