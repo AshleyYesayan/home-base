@@ -137,10 +137,13 @@
     .qa-add{min-height:46px;padding:0 18px}
     .due{display:inline-block;margin-left:8px;font-size:11px;font-weight:800;color:var(--teal);background:#eaf3f4;border-radius:999px;padding:2px 8px;vertical-align:middle}
     .due.overdue{color:#fff;background:#d1554f}
-    .punt-count{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:var(--muted)}
+    .punt-count{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;color:var(--muted);filter:grayscale(.85);opacity:.75}
     .cmt-btn{font-size:13px}
     .cmt-btn.has{color:var(--teal);font-weight:800}
-    .punt-btn{font-size:15px}
+    /* Punt (🏈) is a secondary action — keep it small, muted and low-key so it doesn't dominate every row. It brightens on hover/focus, and stays a full tap target on touch. */
+    .punt-btn{font-size:12px;opacity:.3;filter:grayscale(.85);transition:opacity .15s ease,filter .15s ease}
+    .row:hover .punt-btn,.punt-btn:hover,.punt-btn:focus,.punt-btn:focus-visible{opacity:.9;filter:grayscale(.15)}
+    @media (hover:none){ .punt-btn{opacity:.4} }
     .punt-chip.on{background:var(--gold);border-color:var(--gold);color:var(--ink)}
     .thread{margin:0 0 10px 42px;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:12px}
     .cmt{display:flex;gap:6px;align-items:baseline;font-size:14px;padding:3px 0}
@@ -404,6 +407,7 @@
       <div class="view-head"><h2>Tasks</h2></div>
       <nav class="subtabs">
         <button data-s="pane-week" class="active">This week</button>
+        <button data-s="pane-all">All</button>
         <button data-s="pane-recurring">Recurring</button>
         <button data-s="pane-handyman">Handyman</button>
         <button data-s="pane-upkeep">Upkeep</button>
@@ -412,6 +416,19 @@
       <div class="pane active" id="pane-week">
         <p class="muted small">Everything on for this week. Recurring chores fill in automatically — anything you add here is a one-off you can punt to next week.</p>
         <div id="weekContent"></div>
+      </div>
+      <div class="pane" id="pane-all">
+        <p class="muted small" style="margin:0 0 12px">Everything in one place — recurring routines and one-off tasks, together in a single list. Not-done up top, finished below. Check anything off right here.</p>
+        <div class="card">
+          <h3>🪄 Quick add — just type it</h3>
+          <p class="muted small" style="margin:2px 0 10px">Plain English works, e.g. <em>clean Roomba on the first of every month</em>, <em>flush water heater every 6 months</em>, or <em>replace air filter every 4 weeks</em>.</p>
+          <div class="add-row" style="margin-top:0">
+            <input id="nl-input" placeholder="clean Roomba on the first of every month" aria-label="Add a reminder in plain English" />
+            <button class="btn btn-gold btn-sm" id="nl-add-btn">Add</button>
+          </div>
+          <div id="nl-echo" class="muted small" style="margin:8px 0 0"></div>
+        </div>
+        <div id="allContent"></div>
       </div>
       <div class="pane" id="pane-recurring">
         <div class="view-head" style="margin-bottom:10px"><div class="spacer"></div><button class="btn btn-ghost btn-sm" id="tpl-save">Save as template</button><button class="btn btn-gold btn-sm" id="tpl-refresh">↻ Refresh tasks</button></div>
@@ -872,7 +889,7 @@ document.querySelectorAll("nav.subtabs").forEach(bar=>{
 });
 
 /* ---------- RENDER ---------- */
-function render(){ renderToday(); renderTasks(); renderWeekly(); renderHandyman(); renderUpcoming(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
+function render(){ renderToday(); renderTasks(); renderAllTasks(); renderWeekly(); renderHandyman(); renderUpcoming(); renderReminders(); renderPantry(); renderFreezer(); renderRecipes(); renderMeal(); }
 
 /* ---- Dashboard widgets -------------------------------------------------
    Reorder by dragging the ⠿ handle (desktop) or with ▲ ▼ (works on phones,
@@ -1164,6 +1181,152 @@ function dayEmoji(d){return ({Sunday:"🛒",Tuesday:"🧹",Friday:"✨"})[d]||"�
 
 async function toggleTask(t){ const nd = t.done_date===todayStr()? null : todayStr(); await sb.from("recurring_tasks").update({done_date:nd}).eq("id",t.id); t.done_date=nd; render(); }
 
+/* ===== ALL: recurring routines + one-off tasks in one combined checklist ===== */
+function renderAllTasks(){
+  const wrap = $("#allContent"); if(!wrap) return; wrap.innerHTML = "";
+  const weekIso = thisWeekStart();
+  const dayIdx = d => { const i = DAYS.indexOf(d); return i < 0 ? 97 : i; }; // Sun..Sat; unknown near the end
+
+  const items = [];
+  mineOnly(DATA.recurring_tasks || []).forEach(function(t){
+    items.push({ kind:"routine", day:t.day, label:t.task, done: t.done_date===todayStr(),
+      sort:[dayIdx(t.day), 0, t.position||0, String(t.task||"").toLowerCase()], toggle:function(){ toggleTask(t); } });
+  });
+  mineOnly((DATA.weekly_tasks || []).filter(function(t){ return (t.week_start||weekIso)===weekIso; })).forEach(function(t){
+    items.push({ kind:"oneoff", day:t.day||null, label:t.task, done: !!t.done,
+      sort:[t.day?dayIdx(t.day):98, 1, 0, String(t.task||"").toLowerCase()], toggle:function(){ toggleWeekly(t); } });
+  });
+
+  const cmp = (a,b)=>{ for(let i=0;i<a.sort.length;i++){ if(a.sort[i]<b.sort[i]) return -1; if(a.sort[i]>b.sort[i]) return 1; } return 0; };
+  const open = items.filter(x=>!x.done).sort(cmp);
+  const done = items.filter(x=>x.done).sort(cmp);
+
+  const tag = x => (x.day||"Anytime") + " · " + (x.kind==="routine" ? "Routine" : "One-off");
+  function rowFor(x){
+    const row = el("div","row");
+    const chk = el("div","check"+(x.done?" done":""), x.done?"✓":"");
+    chk.onclick = x.toggle;
+    const g = el("div","grow");
+    g.innerHTML = '<div class="title'+(x.done?' done-text':'')+'">'+esc(x.label)+'</div><div class="sub">'+esc(tag(x))+'</div>';
+    row.appendChild(chk); row.appendChild(g);
+    return row;
+  }
+
+  const oc = el("div","card");
+  oc.appendChild(el("h3", null, '📋 To do'+(open.length?' <span class="pill bad">'+open.length+'</span>':'')));
+  if(!open.length) oc.appendChild(el("div","empty", items.length ? "Nothing left — everything's done. 🎉" : "No tasks yet."));
+  open.forEach(function(x){ oc.appendChild(rowFor(x)); });
+  wrap.appendChild(oc);
+
+  if(done.length){
+    const dc = el("div","card");
+    dc.appendChild(el("h3", null, '✅ Done <span class="pill good">'+done.length+'</span>'));
+    done.forEach(function(x){ dc.appendChild(rowFor(x)); });
+    wrap.appendChild(dc);
+  }
+}
+
+/* ===== Natural-language reminder parser ==================================
+   "clean Roomba on the first of every month" / "flush water heater every 6
+   months" / "replace air filter every 4 weeks" -> a reminders row.
+   Units are weeks / months / years (what the reminders model supports). */
+const ORDINAL_WORDS = {first:1,second:2,third:3,fourth:4,fifth:5,sixth:6,seventh:7,eighth:8,ninth:9,tenth:10,eleventh:11,twelfth:12,thirteenth:13,fourteenth:14,fifteenth:15,sixteenth:16,seventeenth:17,eighteenth:18,nineteenth:19,twentieth:20,"twenty-first":21,"twenty-second":22,"twenty-third":23,"twenty-fourth":24,"twenty-fifth":25,"twenty-sixth":26,"twenty-seventh":27,"twenty-eighth":28,"twenty-ninth":29,thirtieth:30,"thirty-first":31};
+const MONTHS = {jan:0,january:0,feb:1,february:1,mar:2,march:2,apr:3,april:3,may:4,jun:5,june:5,jul:6,july:6,aug:7,august:7,sep:8,sept:8,september:8,oct:9,october:9,nov:10,november:10,dec:11,december:11};
+function addInterval(d, unit, n){ const x=new Date(d); if(unit==="weeks") x.setDate(x.getDate()+7*n); else if(unit==="years") x.setFullYear(x.getFullYear()+n); else x.setMonth(x.getMonth()+n); return x; }
+function parseDateLoose(str){
+  const t=String(str||"").trim().toLowerCase(); if(!t) return null;
+  const now=new Date(todayStr()+"T00:00:00"); let m;
+  m=t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if(m) return new Date(+m[1],+m[2]-1,+m[3]);
+  m=t.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/); if(m){ let y=m[3]?+m[3]:now.getFullYear(); if(y<100)y+=2000; return new Date(y,+m[1]-1,+m[2]); }
+  m=t.match(/^([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?$/); if(m && MONTHS[m[1]]!==undefined){ const y=m[3]?+m[3]:now.getFullYear(); let d=new Date(y,MONTHS[m[1]],+m[2]); if(!m[3] && d<now) d=new Date(y+1,MONTHS[m[1]],+m[2]); return d; }
+  m=t.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]+)$/); if(m && MONTHS[m[2]]!==undefined){ let d=new Date(now.getFullYear(),MONTHS[m[2]],+m[1]); if(d<now) d=new Date(now.getFullYear()+1,MONTHS[m[2]],+m[1]); return d; }
+  return null;
+}
+function parseReminder(raw){
+  const text = String(raw||"").trim();
+  if(!text) return {error:"Type what you'd like to be reminded about."};
+  // s = lowercased for matching; orig = same content, original case, kept in lockstep so
+  // proper nouns (e.g. "Roomba") survive into the name.
+  let s = " " + text.toLowerCase().replace(/\s+/g," ") + " ";
+  let orig = " " + text.replace(/\s+/g," ") + " ";
+  let interval_n=null, interval_unit=null, dom=null, startISO=null, m;
+  function strip(mm){ if(!mm) return; const i=mm.index, len=mm[0].length; s=s.slice(0,i)+" "+s.slice(i+len); orig=orig.slice(0,i)+" "+orig.slice(i+len); }
+
+  // day-of-month, numeric: "on the 1st of every month", "the 15th of the month"
+  m = s.match(/(?:\bon )?(?:\bthe )?\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of )?(?:the |every |each )?month(?:ly)?\b/);
+  if(m && +m[1]>=1 && +m[1]<=31){ dom=+m[1]; interval_n=1; interval_unit="months"; strip(m); }
+  // day-of-month, word ordinal: "on the first of every month"
+  if(dom===null){
+    const words = Object.keys(ORDINAL_WORDS).sort((a,b)=>b.length-a.length).join("|");
+    m = s.match(new RegExp("(?:\\bon )?(?:\\bthe )?\\b(" + words + ")\\s+(?:of )?(?:the |every |each )?month(?:ly)?\\b"));
+    if(m){ dom=ORDINAL_WORDS[m[1]]; interval_n=1; interval_unit="months"; strip(m); }
+  }
+  // "every N weeks/months/years" (days unsupported)
+  if(interval_unit===null){
+    m = s.match(/\bevery (\d+) (day|week|month|year)s?\b/);
+    if(m){ if(m[2]==="day") return {error:"Daily reminders aren't supported — try weeks, months or years."}; interval_n=Math.max(1,+m[1]); interval_unit=m[2]+"s"; strip(m); }
+  }
+  // "every other week/month/year"
+  if(interval_unit===null){ m = s.match(/\bevery other (week|month|year)\b/); if(m){ interval_n=2; interval_unit=m[1]+"s"; strip(m); } }
+  // single-word cadences
+  if(interval_unit===null){
+    const map=[[/\bfortnightly\b|\bbiweekly\b/,2,"weeks"],[/\bevery week\b|\bweekly\b/,1,"weeks"],[/\bbimonthly\b/,2,"months"],[/\bquarterly\b/,3,"months"],[/\bevery month\b|\bmonthly\b/,1,"months"],[/\bevery year\b|\byearly\b|\bannually\b|\bannual\b/,1,"years"],[/\bevery day\b|\bdaily\b/,-1,"day"]];
+    for(let i=0;i<map.length;i++){ m=s.match(map[i][0]); if(m){ if(map[i][2]==="day") return {error:"Daily reminders aren't supported — try weeks, months or years."}; interval_n=map[i][1]; interval_unit=map[i][2]; strip(m); break; } }
+  }
+  // optional explicit start date
+  m = s.match(/\b(?:starting|start|from|beginning)\s+(.+?)\s*$/);
+  if(m){ const d=parseDateLoose(m[1]); if(d){ startISO=isoDate(d); strip(m); } }
+
+  if(interval_unit===null) return {error:"Couldn't find a schedule. Try “every 4 weeks”, “every 2 months”, or “on the first of every month”."};
+
+  let firstDue;
+  if(startISO){ firstDue = new Date(startISO+"T00:00:00"); }
+  else if(dom!==null){
+    const now=new Date(todayStr()+"T00:00:00");
+    firstDue = new Date(now.getFullYear(), now.getMonth(), dom);
+    if(firstDue < now) firstDue = new Date(now.getFullYear(), now.getMonth()+1, dom);
+  } else { firstDue = addInterval(new Date(todayStr()+"T00:00:00"), interval_unit, interval_n); }
+  const last_done = isoDate(addInterval(firstDue, interval_unit, -interval_n));
+
+  let name = orig.replace(/\s+/g," ").trim();
+  name = name.replace(/^(?:please\s+)?(?:remind me to|reminder to|reminder|remind me|add a|add|create a|create|set up a|set up|schedule a|schedule|new)\b[:\s]*/i,"").trim();
+  name = name.replace(/[\s,]*\b(?:on|every|each|the|of|a|to|for)\s*$/i,"").trim();
+  name = name.replace(/^\s*(?:on|every|each|the|of)\b\s*/i,"").trim();
+  if(!name) name = "Reminder";
+  name = name.charAt(0).toUpperCase() + name.slice(1);
+
+  return { name, interval_n, interval_unit, firstDue:isoDate(firstDue), last_done };
+}
+function describeReminder(res){
+  const nd = new Date(res.firstDue+"T00:00:00");
+  const unit = res.interval_unit.replace(/s$/,"") + (res.interval_n>1?"s":"");
+  return { unit, dueTxt: nd.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}) };
+}
+function previewReminderNL(){
+  const inp=$("#nl-input"), echo=$("#nl-echo"); if(!inp||!echo) return;
+  const v=inp.value.trim();
+  if(!v){ echo.innerHTML=""; return; }
+  const res=parseReminder(v);
+  if(res.error){ echo.innerHTML='<span class="muted">'+esc(res.error)+'</span>'; return; }
+  const d=describeReminder(res);
+  echo.innerHTML='Understood → <b>'+esc(res.name)+'</b> · every '+res.interval_n+' '+d.unit+' · first due '+d.dueTxt;
+}
+async function addReminderNL(){
+  const inp=$("#nl-input"), echo=$("#nl-echo"), btn=$("#nl-add-btn"); if(!inp) return;
+  const res=parseReminder(inp.value);
+  if(res.error){ if(echo) echo.innerHTML='<span style="color:#d1554f">'+esc(res.error)+'</span>'; toast(res.error); return; }
+  if(btn) btn.disabled=true;
+  try{
+    await sb.from("reminders").insert({ name:res.name, interval_n:res.interval_n, interval_unit:res.interval_unit, last_done:res.last_done });
+    await refresh("reminders");
+    const d=describeReminder(res);
+    inp.value="";
+    if(echo) echo.innerHTML='<span style="color:var(--good);font-weight:700">✓ Added “'+esc(res.name)+'” — every '+res.interval_n+' '+d.unit+', next due '+d.dueTxt+'</span>';
+    render(); toast("Reminder added.");
+  }catch(e){ if(echo) echo.innerHTML='<span style="color:#d1554f">Couldn’t save — please try again.</span>'; }
+  finally{ if(btn) btn.disabled=false; }
+}
+
 function renderReminders(){
   const wrap=$("#remindersList"); wrap.innerHTML="";
   if(DATA.reminders.length===0){ wrap.appendChild(el("div","empty","No reminders yet.")); }
@@ -1179,6 +1342,8 @@ function renderReminders(){
 }
 async function markReminder(id){ await sb.from("reminders").update({last_done:todayStr()}).eq("id",id); await refresh("reminders"); render(); toast("Marked done — clock reset."); }
 $("#rm-add").onclick=async()=>{ const name=$("#rm-name").value.trim(); if(!name)return; await sb.from("reminders").insert({name,interval_n:+$("#rm-n").value||1,interval_unit:$("#rm-unit").value,last_done:todayStr()}); $("#rm-name").value=""; await refresh("reminders"); render(); };
+if($("#nl-add-btn")){ $("#nl-add-btn").onclick=addReminderNL; }
+if($("#nl-input")){ $("#nl-input").addEventListener("input", previewReminderNL); $("#nl-input").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); addReminderNL(); } }); }
 
 function renderPantry(){
   const wrap=$("#pantryContent"); wrap.innerHTML="";
