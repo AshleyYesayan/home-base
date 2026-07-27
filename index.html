@@ -1853,6 +1853,37 @@ function renderUpcoming(){
     const done=el("button","icon-btn","✓"); done.title="Done (reset clock to today)"; done.style.color="var(--good)"; done.onclick=()=>markReminder(r.id);
     row.appendChild(g); row.appendChild(pill); row.appendChild(dp); row.appendChild(done); c.appendChild(row);
   });
+  // --- Add a new reminder, right here on the dashboard ---
+  const addBox=el("div"); addBox.style.marginTop="12px";
+  const toggle=el("button","btn btn-sm btn-ghost","＋ Add a reminder");
+  const form=el("div","add-row"); form.style.marginTop="10px"; form.style.alignItems="center"; form.style.display="none";
+  const nameI=el("input"); nameI.placeholder="Reminder name — e.g. Change air filter"; nameI.setAttribute("aria-label","Reminder name");
+  const everyLbl=el("span","muted small","every"); everyLbl.style.flex="none";
+  const nI=el("input"); nI.type="number"; nI.min="1"; nI.value="1"; nI.setAttribute("aria-label","Repeat every this many"); nI.style.cssText="flex:none;min-width:0;max-width:64px";
+  const unitS=el("select"); unitS.setAttribute("aria-label","Repeat unit"); unitS.style.cssText="flex:none;min-width:0;max-width:100px"; unitS.innerHTML='<option value="weeks">weeks</option><option value="months" selected>months</option><option value="years">years</option>';
+  const dueLbl=el("span","muted small","· first due"); dueLbl.style.flex="none";
+  const dateI=el("input"); dateI.type="date"; dateI.value=todayStr(); dateI.setAttribute("aria-label","First due date"); dateI.style.cssText="flex:none;min-width:0;max-width:150px";
+  const addBtn=el("button","btn btn-sm btn-gold","Add"); addBtn.style.flex="none";
+  form.appendChild(nameI); form.appendChild(everyLbl); form.appendChild(nI); form.appendChild(unitS); form.appendChild(dueLbl); form.appendChild(dateI); form.appendChild(addBtn);
+  async function submitReminder(){
+    const nm=nameI.value.trim(); if(!nm){ nameI.focus(); return; }
+    const n=Math.max(1, parseInt(nI.value,10)||1);
+    const unit=unitS.value;
+    // Back-compute last_done from the chosen first-due date so nextDue() lands on that date.
+    const ld=new Date((dateI.value||todayStr())+"T00:00:00");
+    if(unit==="weeks") ld.setDate(ld.getDate()-7*n);
+    else if(unit==="years") ld.setFullYear(ld.getFullYear()-n);
+    else ld.setMonth(ld.getMonth()-n);
+    addBtn.disabled=true;
+    try{
+      await sb.from("reminders").insert({name:nm, interval_n:n, interval_unit:unit, last_done:isoDate(ld)});
+      await refresh("reminders"); render(); toast("Reminder added.");
+    }catch(e){ addBtn.disabled=false; toast("Couldn't add that — please try again."); }
+  }
+  addBtn.onclick=submitReminder;
+  nameI.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); submitReminder(); } });
+  toggle.onclick=()=>{ const open=form.style.display==="none"; form.style.display=open?"flex":"none"; toggle.textContent=open?"✕ Cancel":"＋ Add a reminder"; if(open) nameI.focus(); };
+  addBox.appendChild(toggle); addBox.appendChild(form); c.appendChild(addBox);
   wrap.appendChild(c);
   // recurring task days (next occurrence)
   const daysWith=[...new Set(DATA.recurring_tasks.map(t=>t.day))];
